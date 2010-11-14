@@ -5,6 +5,7 @@ import os
 import sqlite3
 import time
 import shutil
+import threading
 from contextlib import contextmanager
 
 class program(object):
@@ -26,7 +27,35 @@ class program(object):
             raise ProgramFailed(ProgramOutput(return_code, cmds, 
                                               sp.stdout.readlines(), 
                                               sp.stderr.readlines()))
-    def __lsf__(self, ex, *args):
+    def nonblocking(self, ex, *args):
+        (cmds,n) = self.gen_args(*args)
+        class Future(object):
+            def __init__(self):
+                self.program_output = None
+                self.return_value = None
+            def wait(self):
+                v.wait()
+                ex.report(self.program_output)
+                return self.return_value
+        f = Future()
+        v = threading.Event()
+        def g():
+            sp = subprocess.Popen(cmds, bufsize=-1, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE,
+                                  cwd = ex.exwd)
+            return_code = sp.wait()
+            f.program_output = ProgramOutput(return_code, sp.pid,
+                                             cmds, 
+                                             sp.stdout.readlines(), 
+                                             sp.stderr.readlines())
+            if return_code == 0:
+                f.return_value = cmds[n]
+            v.set()
+        a = threading.Thread(target=g)
+        a.start()
+        return(f)
+
+    def lsf(self, ex, *args):
         pass
 
 class ProgramOutput(object):
@@ -65,6 +94,10 @@ def touch():
     filename = unique_filename_in(os.getcwd())
     return (["touch",filename],1)
 
+@program
+def sleep(n):
+    return (["sleep", str(n)],0)
+
 class Execution(object):
     def __init__(self, lims, exwd):
         self.lims = lims
@@ -92,6 +125,7 @@ def execution(lims = None):
     ex.finish()
     if lims != None:
         lims.write(ex)
+    shutil.rmtree(ex.exwd)
 
 class MiniLims:
     def __init__(self, path):
@@ -193,13 +227,16 @@ class MiniLims:
         self.db.commit()
         return exid
 
-m = MiniLims("test")
-with execution(m) as ex:
+#m = MiniLims("test")
+#with execution(m) as ex:
 #    f = bowtie(ex, index = '../test_data/selected_transcripts', reads = '../test_data/reads-1-1')
-    f = touch(ex)
-    ex.add(f, "Testing")
-with execution(m) as ex:
-    print ex.use(1)
-    print ex.exwd
+#    f = touch(ex)
+#    g = sleep.nonblocking(ex,1)
+#    ex.add(f, "Testing")
+#    print g.wait()
+    
+#with execution(m) as ex:
+#    print ex.use(1)
+#    print ex.exwd
         
 
