@@ -60,8 +60,14 @@ def sam_to_bam(sam_filename):
     bam_filename = unique_filename_in(os.getcwd())
     return (["samtools","view","-b","-S","-o",bam_filename,sam_filename], 5)
 
+@program
+def touch():
+    filename = unique_filename_in(os.getcwd())
+    return (["touch",filename],1)
+
 class Execution(object):
-    def __init__(self, exwd):
+    def __init__(self, lims, exwd):
+        self.lims = lims
         self.exwd = exwd
         self.programs = []
         self.files = []
@@ -73,13 +79,15 @@ class Execution(object):
         self.files.append((file_name,description))
     def finish(self):
         self.finished_at = int(time.time())
+    def use(self, fileid):
+        return [x for (x,) in self.lims.db.execute("select exportfile(?,?)", (fileid, self.exwd))][0]
         
 
 @contextmanager
 def execution(lims = None):
     execution_dir = unique_filename_in(os.getcwd())
     os.mkdir(os.path.join(os.getcwd(), execution_dir))
-    ex = Execution(os.path.join(os.getcwd(), execution_dir))
+    ex = Execution(lims,os.path.join(os.getcwd(), execution_dir))
     yield ex
     ex.finish()
     if lims != None:
@@ -92,6 +100,9 @@ class MiniLims:
         if not(os.path.exists(self.file_path)):
             self.initialize_database(self.db)
             os.mkdir(self.file_path)
+        self.db.create_function("importfile",1,self.copy_file_to_repository)
+        self.db.create_function("deletefile",1,self.delete_repository_file)
+        self.db.create_function("exportfile",2,self.export_file_from_repository)
 
     def initialize_database(self, db):
         self.db.execute("""
@@ -132,11 +143,7 @@ class MiniLims:
                origin_value integer default null
         )""")
 
-        self.db.create_function("importfile",1,self.copy_file_to_repository)
-        self.db.create_function("deletefile",1,self.delete_repository_file)
-        self.db.execute("""
-        CREATE TRIGGER delete_file AFTER DELETE ON file FOR EACH ROW BEGIN 
-        SELECT deletefile(OLD.repository_name); END""")
+        self.db.commit()
         self.db.execute("""
         CREATE TRIGGER prevent_repository_name_change BEFORE UPDATE ON file
         FOR EACH ROW WHEN (OLD.repository_name != NEW.repository_name) BEGIN
@@ -151,6 +158,17 @@ class MiniLims:
     def delete_repository_file(self,filename):
         os.remove(os.path.join(self.file_path,filename))
         return None
+
+    def export_file_from_repository(self,fileid,dst):
+        filename = unique_filename_in(dst)
+        try:
+            [repository_filename] = [x for (x,) in self.db.execute("select repository_name from file where id=?", 
+                                                                   (fileid,))]
+            shutil.copyfile(os.path.abspath(os.path.join(self.file_path,repository_filename)),
+                            os.path.abspath(os.path.join(dst, filename)))
+            return filename
+        except ValueError, v:
+            return None
 
     def write(self, ex, description = ""):
         """Write an execution to the miniLims"""
@@ -177,8 +195,11 @@ class MiniLims:
 
 m = MiniLims("test")
 with execution(m) as ex:
-    f = bowtie(ex,'../test_data/selected_transcripts','../test_data/reads-1-1')
+#    f = bowtie(ex, index = '../test_data/selected_transcripts', reads = '../test_data/reads-1-1')
+    f = touch(ex)
     ex.add(f, "Testing")
-
+with execution(m) as ex:
+    print ex.use(1)
+    print ex.exwd
         
 
