@@ -4,6 +4,7 @@ import string
 import os
 import sqlite3
 import time
+import shutil
 from contextlib import contextmanager
 
 class program(object):
@@ -52,7 +53,7 @@ def unique_filename_in(path):
 @program
 def bowtie(index, reads):
     sam_filename = unique_filename_in(os.getcwd())
-    return (["bowtie", "-Sra", index, reads,sam_filename], 2)
+    return (["bowtie", "-Sra", index, reads,sam_filename], 4)
 
 @program
 def sam_to_bam(sam_filename):
@@ -63,10 +64,13 @@ class Execution(object):
     def __init__(self, exwd):
         self.exwd = exwd
         self.programs = []
+        self.files = []
         self.started_at = int(time.time())
         self.finished_at = None
     def report(self, program):
         self.programs.append(program)
+    def add(self, file_name, description=""):
+        self.files.append((file_name,description))
     def finish(self):
         self.finished_at = int(time.time())
         
@@ -97,7 +101,7 @@ class MiniLims:
              finished_at integer default null,
              working_directory text not null, 
              description text not null default '' 
-        );""")
+        )""")
         self.db.execute("""
         CREATE TABLE program (
                pos integer,
@@ -108,7 +112,7 @@ class MiniLims:
                stdout text default null,
                stderr text default null,
                primary key (pos,execution)
-        );""")
+        )""")
         self.db.execute("""
         CREATE TABLE argument (
                pos integer,
@@ -116,7 +120,37 @@ class MiniLims:
                execution integer references program(execution),
                argument text not null,
                primary key (pos,program,execution)
-        );""")
+        )""")
+        self.db.execute("""
+        CREATE TABLE file ( 
+               id integer primary key autoincrement, 
+               external_name text, 
+               repository_name text,
+               created timestamp default current_timestamp, 
+               description text not null default '',
+               origin text not null default 'execution', 
+               origin_value integer default null
+        )""")
+
+        self.db.create_function("importfile",1,self.copy_file_to_repository)
+        self.db.create_function("deletefile",1,self.delete_repository_file)
+        self.db.execute("""
+        CREATE TRIGGER delete_file AFTER DELETE ON file FOR EACH ROW BEGIN 
+        SELECT deletefile(OLD.repository_name); END""")
+        self.db.execute("""
+        CREATE TRIGGER prevent_repository_name_change BEFORE UPDATE ON file
+        FOR EACH ROW WHEN (OLD.repository_name != NEW.repository_name) BEGIN
+             SELECT RAISE(FAIL, 'Cannot change the repository name of a file.');
+        END""")
+
+    def copy_file_to_repository(self,src):
+        filename = unique_filename_in(self.file_path)
+        shutil.copyfile(src,os.path.abspath(os.path.join(self.file_path,filename)))
+        return filename
+
+    def delete_repository_file(self,filename):
+        os.remove(os.path.join(self.file_path,filename))
+        return None
 
     def write(self, ex, description = ""):
         """Write an execution to the miniLims"""
@@ -134,12 +168,17 @@ class MiniLims:
             for j,a in enumerate(p.arguments):
                 self.db.execute("""insert into argument(pos,program,execution,argument) values (?,?,?,?)""",
                                 (j,prid,exid,a))
+        for (filename,description) in ex.files:
+            self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value) values (?,importfile(?),?,?,?)""",
+                            (filename,os.path.abspath(os.path.join(ex.exwd,filename)),
+                             description,'execution',exid))
         self.db.commit()
         return exid
 
 m = MiniLims("test")
 with execution(m) as ex:
-    print(bowtie(ex,'../test_data/selected_transcripts','../test_data/reads-1-1'))
+    f = bowtie(ex,'../test_data/selected_transcripts','../test_data/reads-1-1')
+    ex.add(f, "Testing")
 
         
 
