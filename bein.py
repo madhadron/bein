@@ -23,7 +23,6 @@ import time
 import shutil
 import threading
 from contextlib import contextmanager
-from bein._bein import *
 
 # miscellaneous types
 
@@ -199,7 +198,7 @@ class Execution(object):
         self.finished_at = int(time.time())
     def use(self, fileid):
         return [x for (x,) in self.lims.db.execute("select exportfile(?,?)", (fileid, self.exwd))][0]
-        
+
 
 @contextmanager
 def execution(lims = None):
@@ -316,15 +315,37 @@ class MiniLims:
         self.db.commit()
         return exid
 
-# m = MiniLims("test")
-# with execution(m) as ex:
+    def search_files(self, with_text=None, older_than=None, newer_than=None, source=None):
+        """Find files matching given criteria in the LIMS.
+
+        source should be a 2-tuple of ('execution',id), etc.
+        """
+        source = source != None and source or (None,None)
+        with_text = with_text != None and '%' + with_text + '%' or None
+        sql = """select id from file where ((external_name like ? or ? is null)
+                                            or (description like ? or ? is null))
+                                          and (created >= ? or ? is null)
+                                          and (created <= ? or ? is null)
+                 and ((origin = ? and origin_value = ?) or ? is null or ? is null)"""
+        matching_files = self.db.execute(sql, (with_text, with_text,
+                                               with_text, with_text,
+                                               newer_than, newer_than, older_than, older_than,
+                                               source[0], source[1], source[0], source[1]))
+        return [x for (x,) in matching_files]
+
+
+def get_ex():
+    m = MiniLims("test")
+    with execution(m) as ex:
 # #    f = bowtie(ex, '../test_data/selected_transcripts', '../test_data/reads-1-1')
-#     f = touch(ex)
+        f = touch(ex)
+    return ex
+     
 #     g = sleep.lsf(ex,1)
 #     ex.add(f, "Testing")
 #     print g.wait()
     
-# with execution(m) as ex:
+#with execution(m) as ex:
 #     print ex.use(1)
 #     print ex.exwd
         
