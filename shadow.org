@@ -2,7 +2,7 @@
 ** TODO LSF nonblocking executions
 *** TODO Get sqlite3 library for Python working on cluster
 Waiting for Arnaud to install sqlite-devel-3.3.6 RPM, then I'll have to recompile Python.
-*** TODO Change -c to -cwd in lsf() function on program (it's set to -c to use my mock bsub right now)
+*** DONE Change -c to -cwd in lsf() function on program (it's set to -c to use my mock bsub right now)
 *** Try PyLSF on the cluster.  Does it work?
 Doesn't work with LSF 7, only 6.2.  VITAL-IT uses 7.  Just use bsub directly.
 
@@ -16,8 +16,14 @@ bsub command line options:
 *** Write lsf() on program like nonblocking, but calling PyLSF
 ** Add search and query operations to MiniLIMS
 *** How do I want to do this?  Return a list of file ids?  Search based on text lookups in description and filename.  Search by date and time.  Borrow the form from Scheme bein.
+Wrote search_files.  Now executions?
+*** DONE search_executions - checks description and arguments of each program.
 ** Add copy, delete, and import operations to MiniLIMS
 *** Just a few operations.
+*** DONE Write copy file method for MiniLIMS
+*** TODO Write delete file method for MiniLIMS
+*** TODO Write delete execution method for MiniLIMS
+*** TODO Write import file method for MiniLIMS
 ** Add configuration files
 *** Is there a good Python library for this?
 *** Formulate a search policy for finding the files
