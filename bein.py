@@ -576,7 +576,14 @@ class MiniLIMS:
     def write(self, ex, description = ""):
         """Write an execution to the MiniLIMS.
 
-        Give some details about where things are written.
+        The overall Execution object is recorded in the execution
+        table.  Each program in it is entered as a row in the program
+        table, including their stdout, stderr, etc.  Each argument to
+        the program gets a row in the argument table.  All files which
+        were used in the execution from the MiniLIMS repository are
+        added to the execution_use table.  Any files which were added
+        to the repository are copied to the repository and entered in
+        the file table.
         """
         self.db.execute("""
                         insert into execution(started_at,finished_at,
@@ -640,7 +647,33 @@ class MiniLIMS:
                                                source[0], source[0], source[1], source[1]))
         return [x for (x,) in matching_files]
 
-    def search_executions(self, with_text=None, started_before=None, started_after=None, ended_before=None, ended_after=None):
+    def search_executions(self, with_text=None, started_before=None,
+                          started_after=None, ended_before=None, ended_after=None):
+        """Find executions matching the given criteria.
+
+        Returns a list of execution ids of executions which satisfy
+        all the criteria which are not None.  The criteria are:
+
+           * with_text: The execution's description or one of the
+             program arguments in the execution contains 'with_text'.
+
+           * started_before: The execution started running before
+             'start_before'.  This should be of the form "YYYY:MM:DD
+             HH:MM:SS".  Final fields can be omitted, so "YYYY" and
+             "YYYY:MM:DD HH:MM" are also valid date formats.
+
+           * started_after: The execution started running after
+             'started_after'.  The format is identical to
+             'started_before'.
+
+           * ended_before: The execution finished running before
+             'ended_before'.  The format is the same as for
+             'started_before'.
+
+           * ended_after: The execution finished running after
+             'ended_after'.  The format is the same as for
+             'started_before'.
+        """
         with_text = with_text != None and '%'+with_text+'%' or None
         sql = """select id from execution where 
                  (started_at <= ? or ? is null) and (started_at >= ? or ? is null) and
@@ -660,6 +693,13 @@ class MiniLIMS:
         return list(set(matching_executions+matching_programs))
 
     def copy_file(self, fileid):
+        """Copy the given file in the MiniLIMS repository.
+
+        A copy of the file corresponding to the given fileid is made
+        in the MiniLIMS repository, and the file id of the copy is
+        returned.  This is most useful to create a mutable copy of an
+        immutable file.
+        """
         try:
             sql = "select external_name,repository_name,description from file where id = ?"
             [(external_name, repository_name, description)] = [x for x in self.db.execute(sql, (fileid, ))]
@@ -675,6 +715,7 @@ class MiniLIMS:
             raise ValueError("No such file id " + str(fileid))
     
     def delete_file(self, fileid):
+        """Delete a file from the repository."""
         try:
             sql = "select repository_name from file where id = ?"
             [repository_name] = [x for (x,) in self.db.execute(sql, (fileid,))]
@@ -686,6 +727,7 @@ class MiniLIMS:
             raise ValueError("No such file id " + str(fileid))
 
     def delete_execution(self, execution_id):
+        """Delete an execution from the MiniLIMS repository."""
         try:
             [x for x in self.db.execute("delete from argument where execution = ?", (execution_id,))]
             [x for x in self.db.execute("delete from program where execution = ?", (execution_id,))]
@@ -695,6 +737,13 @@ class MiniLIMS:
             raise ValueError("No such execution id " + str(execution_id))
 
     def import_file(self, src, description=""):
+        """Add an external file 'src' to the MiniLIMS repository.
+
+        'src' should be the path to the file to be added.
+        'description' is an optional string that will be attached to
+        the file in the repository.  import_file returns the file id
+        in the repository of the newly imported file.
+        """
         [x for x in self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value)
                                        values (?,importfile(?),?,?,?)""",
                                     (os.path.basename(src),os.path.abspath(src),
