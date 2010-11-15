@@ -268,6 +268,21 @@ class program(object):
 
 
 class Execution(object):
+    """Execution objects hold the state of a current running execution.
+    
+    You should generally use the execution function below to create an
+    Execution, since it sets up the working directory properly.
+
+    Executions are run against a particular MiniLIMS object where it
+    records all the information onf programs that were run during it,
+    fetches files from it, and writes files back to it.
+
+    The important methods for the user to know are 'add' and 'use'.
+    Everything else is used internally by bein.  'add' puts a file
+    into the LIMS repository from the execution's working directory.
+    'use' fetches a file from the LIMS repository into the working
+    directory.
+    """
     def __init__(self, lims, exwd):
         self.lims = lims
         self.exwd = exwd
@@ -277,12 +292,37 @@ class Execution(object):
         self.started_at = int(time.time())
         self.finished_at = None
     def report(self, program):
+        """Add a ProgramOutput object to the execution.
+
+        When the Execution finishes, all programs added to the
+        Execution with 'report', in the order the were added, are
+        written into the MiniLIMS repository.
+        """
         self.programs.append(program)
-    def add(self, file_name, description=""):
-        self.files.append((file_name,description))
+    def add(self, filename, description=""):
+        """Add a file to the MiniLIMS object from this execution.
+
+        filename is the name of the file in the execution's working
+        directory to import.  description is an optional argument to
+        assign a string to describe that file in the MiniLIMS
+        repository.  The function returns an integer, the file id of
+        the file in the MiniLIMS repository.
+
+        Note that the file is not actually added to the repository
+        until the execution finishes.
+        """
+        self.files.append((filename,description))
     def finish(self):
+        """Set the time when the execution finished."""
         self.finished_at = int(time.time())
     def use(self, fileid):
+        """Fetch a file from the MiniLIMS repository.
+
+        fileid should be an integer assigned to a file in the MiniLIMS
+        repository.  The file is copied into the execution's working
+        directory with a unique filename.  'use' returns the unique
+        filename it copied the file into.
+        """
         try:
             filename = [x for (x,) in self.lims.db.execute("select exportfile(?,?)", 
                                                            (fileid, self.exwd))][0]
@@ -294,6 +334,19 @@ class Execution(object):
 
 @contextmanager
 def execution(lims = None):
+    """Create an Execution connected to the given MiniLIMS object.
+    
+    execution is a contextmanager, so it can be used in a with
+    statement, as in,
+
+    with execution(mylims) as ex:
+        touch('boris')
+
+    It creates a temporary directory where the execution will work and
+    sets up the Execution object, then writes the Execution to the
+    MiniLIMS repository and deletes the temporary directory after all
+    is finished.
+    """
     execution_dir = unique_filename_in(os.getcwd())
     os.mkdir(os.path.join(os.getcwd(), execution_dir))
     ex = Execution(lims,os.path.join(os.getcwd(), execution_dir))
@@ -304,21 +357,37 @@ def execution(lims = None):
     shutil.rmtree(ex.exwd)
 
 
-# MiniLIMS
-
-
 class MiniLIMS:
     """Encapsulates a database and directory to track executions and files.
 
-    Tries to check if it doesn't exist, and creates it if not.  Format of the LIMS repository: name (an SQLite3 database) and name.files (a directory containing the files it refers to).  You should never edit the files directory by hand or you may leave the database inconsistent.
+    A MiniLIMS repository consists of a SQLite database and a
+    directory of the same name with '.files' appended where all files
+    kept in the repository are stored.  For example, if the SQLite
+    database is '/home/boris/myminilims', then there is a directory
+    '/home/boris/myminilims.files' with all the corresponding files.
+    You should never edit the repository by hand!.
 
-    Give structure of the tables: execution, program, argument, and file.  Make a couple remarks about the triggers.
+    If you create a MiniLIMS object pointing to a nonexistent
+    database, then it creates the database and the file directory.
 
-    Adds Python functions to it (you can't really use the LIMS sensibly without them, so it's limited to Python.  You can easily add your own versions.  The functions are importfile, deletefile, and exportfile.  Give their behaviors.
+    The MiniLIMS database has a set of tables 'execution', 'program',
+    'argument', and 'execution_use' where Execution objects are
+    recorded.  Each Execution object corresponds to a single id in the
+    execution table.  There is also a table called 'file' which points
+    to files added to the repository, and a number of views and
+    triggers to maintain the repository's integrity.
 
-    'write' writes an execution to the LIMS, including adding files from its working directory.
+    All the work of writing an Execution into the repository is done
+    by the 'write' method.  Users should generally not call this.  In
+    addition, several methods are meant for use by the database.  The
+    methods a user should use are:
 
-    search_files looks up files in the LIMS
+       * search_files
+       * search_executions
+       * copy_file
+       * delete_file
+       * delete_execution
+       * import_file
     """
     def __init__(self, path):
         self.db = sqlite3.connect(path)
@@ -332,7 +401,6 @@ class MiniLIMS:
 
     def initialize_database(self, db):
         """Sets up a new MiniLIMS database.
-
         """
         self.db.execute("""
         CREATE TABLE execution ( 
@@ -448,19 +516,40 @@ class MiniLIMS:
     def search_files(self, with_text=None, older_than=None, newer_than=None, source=None):
         """Find files matching given criteria in the LIMS.
 
-        source should be a 2-tuple of ('execution',id), etc.  Explain the other fields.
+        Finds files which satisfy all the criteria which are not None.
+        The criteria are:
+
+           * with_text: The file's external_name or description
+             contains 'with_text'
+
+           * older_than: The file's created time is earlier than
+             'older_than'.  This should be of the form "YYYY:MM:DD
+             HH:MM:SS".  Final fields can be omitted, so "YYYY" and
+             "YYYY:MM:DD HH:MM" are also valid date formats.
+
+           * newer_than: The file's created time is later than
+             'newer_then', using the same format as 'older_than'.
+
+           * source: Where the file came from.  Can be one of
+             'execution', 'copy', 'import', ('execution',exid), or
+             ('copy',srcid), where exid is the id of the execution
+             that created this file, and srcid is the file id of the
+             file which was copied to create this one.
         """
+        if not(isinstance(source, tuple)):
+            source = (source,None)
         source = source != None and source or (None,None)
         with_text = with_text != None and '%' + with_text + '%' or None
         sql = """select id from file where ((external_name like ? or ? is null)
                                             or (description like ? or ? is null))
                                           and (created >= ? or ? is null)
                                           and (created <= ? or ? is null)
-                 and ((origin = ? and origin_value = ?) or ? is null or ? is null)"""
+                                          and (origin = ? or ? is null)
+                                          and (origin_value = ? or ? is null)"""
         matching_files = self.db.execute(sql, (with_text, with_text,
                                                with_text, with_text,
                                                newer_than, newer_than, older_than, older_than,
-                                               source[0], source[1], source[0], source[1]))
+                                               source[0], source[0], source[1], source[1]))
         return [x for (x,) in matching_files]
 
     def search_executions(self, with_text=None, started_before=None, started_after=None, ended_before=None, ended_after=None):
