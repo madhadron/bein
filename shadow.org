@@ -36,8 +36,7 @@ Wrote search_files.  Now executions?
 *** Add docstrings to everything, rearrange it for clarity.  Write some overall structure comments.
 ** Write unit tests
 *** How do I unit test this?  Set up the mocks...
-** Add immutability constraints to MiniLIMS
-Working on it.  execution_immutability isn't quite right yet.
+** DONE Add immutability constraints to MiniLIMS
 *** Pull these from the SQL file I dumped out of the Scheme bein database
 
 
