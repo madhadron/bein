@@ -273,6 +273,7 @@ class Execution(object):
         self.exwd = exwd
         self.programs = []
         self.files = []
+        self.used_files = []
         self.started_at = int(time.time())
         self.finished_at = None
     def report(self, program):
@@ -282,8 +283,13 @@ class Execution(object):
     def finish(self):
         self.finished_at = int(time.time())
     def use(self, fileid):
-        return [x for (x,) in self.lims.db.execute("select exportfile(?,?)", 
-                                                   (fileid, self.exwd))][0]
+        try:
+            filename = [x for (x,) in self.lims.db.execute("select exportfile(?,?)", 
+                                                           (fileid, self.exwd))][0]
+            self.used_files.append(fileid)
+            return filename
+        except ValueError, v:
+            raise ValueError("Tried to use a nonexistent file id " + str(fileid))
 
 
 @contextmanager
@@ -366,6 +372,11 @@ class MiniLIMS:
                origin_value integer default null
         )""")
         self.db.execute("""
+        CREATE TABLE execution_use (
+               execution integer references execution(id),
+               file integer references file(id)
+        )""")
+        self.db.execute("""
         CREATE TRIGGER prevent_repository_name_change BEFORE UPDATE ON file
         FOR EACH ROW WHEN (OLD.repository_name != NEW.repository_name) BEGIN
              SELECT RAISE(FAIL, 'Cannot change the repository name of a file.');
@@ -429,6 +440,8 @@ class MiniLIMS:
             self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value) values (?,importfile(?),?,?,?)""",
                             (filename,os.path.abspath(os.path.join(ex.exwd,filename)),
                              description,'execution',exid))
+        for used_file in set(ex.used_files):
+            [x for x in self.db.execute("""insert into execution_use(execution,file) values (?,?)""", (exid,used_file))]
         self.db.commit()
         return exid
 
@@ -504,6 +517,15 @@ class MiniLIMS:
         except ValueError, v:
             raise ValueError("No such execution id " + str(execution_id))
 
+    def import_file(self, src, description=""):
+        [x for x in self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value)
+                                       values (?,importfile(?),?,?,?)""",
+                                    (os.path.basename(src),os.path.abspath(src),
+                                     description,'import',None))]
+        self.db.commit()
+        return [x for (x,) in self.db.execute("""select last_insert_rowid()""")][0]
+        
+
 
 
 def get_ex():
@@ -512,6 +534,8 @@ def get_ex():
 # #    f = bowtie(ex, '../test_data/selected_transcripts', '../test_data/reads-1-1')
         f = touch(ex)
         g = sleep.nonblocking(ex,1)
+        ex.add(f)
+        ex.use(1)
         print g.wait()
     
 #with execution(m) as ex:
