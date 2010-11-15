@@ -1,3 +1,19 @@
+"""bein
+by Frederick Ross <madhadron@gmail.com>
+
+bein.py contains a miniature LIMS (Laboratory Information Management System) and a workflow manager.  It was written for the Bioinformatics and Biostatistics Core Facility of the Ecole Polytechnique Federale de Lausanne.
+
+There are three core classes you need to understand:
+
+program
+* Used as a decorator, is callable, and has methods for nonblocking and lsf
+
+Execution
+* Actually created using the execution() function.  Stores all information about an ongoing execution.
+
+MiniLIMS
+* Database and file directory object.  Never edit a MiniLIMS repository by hand.
+"""
 import subprocess
 import random
 import string
@@ -7,11 +23,69 @@ import time
 import shutil
 import threading
 from contextlib import contextmanager
+from bein._bein import *
+
+# miscellaneous types
+
+class ProgramOutput(object):
+    def __init__(self, return_code, pid, arguments, stdout, stderr):
+        self.return_code = return_code
+        self.pid = pid
+        self.arguments = arguments
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class ProgramFailed(Exception):
+    def __init__(self, output):
+        self.output = output
+
+
+def unique_filename_in(path):
+    def random_string():
+        return "".join([random.choice(string.letters + string.digits) 
+                        for x in range(20)])
+    filename = random_string()
+    while os.path.exists(os.path.join(path,filename)):
+        filename = random_string()
+    return filename
+
+
+# programs
 
 class program(object):
+    """Decorator to wrap make programs for use by bein.
+
+    * One paragraph overview of what's going on
+    * How to wrap a function
+    * How to call a wrapped function
+
+    The decorated function should return a two element tuple.  The
+    first element is a list of strings giving the command and
+    arguments to run.  The second is the position in that tuple that
+    should be returned if the program exits with return code 0.
+
+    An extra argument is inserted before the argument list of the
+    generated function, which takes an execution.
+
+    For example,
+    @program
+    def touch(filename):
+        return (["touch",filename], 1)
+    """
     def __init__(self, gen_args):
         self.gen_args = gen_args
+
     def __call__(self, ex, *args):
+        """Run a program locally, and block until it completes.
+
+        In addition to the arguments to the decorated function, the
+        program object created by a decorator takes an Execution
+        object as an extra argument at the beginning of the argument
+        list.
+
+        * Add stuff about recording to execution object.
+        """
         (cmds,n) = self.gen_args(*args)
         sp = subprocess.Popen(cmds, bufsize=-1, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE,
@@ -19,15 +93,26 @@ class program(object):
         return_code = sp.wait()
         ex.report(ProgramOutput(return_code, sp.pid,
                                 cmds, 
-                                sp.stdout.readlines(), 
-                                sp.stderr.readlines()))
+                                sp.stdout.readlines(),   # stdout and stderr
+                                sp.stderr.readlines()))  # are lists of strings ending with newlines
         if return_code == 0:
             return cmds[n]
         else: 
-            raise ProgramFailed(ProgramOutput(return_code, cmds, 
+            raise ProgramFailed(ProgramOutput(return_code, sp.pid, cmds, 
                                               sp.stdout.readlines(), 
                                               sp.stderr.readlines()))
+
     def nonblocking(self, ex, *args):
+        """Run a program locally, but return a Future object instead of blocking.
+
+        Like __call__, takes an Execution as an extra, initial
+        argument before the arguments to the decorated function.
+        Instead of blocking until the program completes, it runs it in
+        a separate thread, and returns a Future object which lets you
+        block when you wish.  The future object has a method wait().
+        When called, it blocks until the program finishes running,
+        then returns the same value as __call__ would have.
+        """
         (cmds,n) = self.gen_args(*args)
         class Future(object):
             def __init__(self):
@@ -56,47 +141,47 @@ class program(object):
         return(f)
 
     def lsf(self, ex, *args):
-        pass
+        """Run a program via the LSF batch queue, but do not block locally.
 
-class ProgramOutput(object):
-    def __init__(self, return_code, pid, arguments, stdout, stderr):
-        self.return_code = return_code
-        self.pid = pid
-        self.arguments = arguments
-        self.stdout = stdout
-        self.stderr = stderr
+        For the programmer, this call appears identical to
+        nonblocking, except that the program is run via the LSF batch
+        system (using the bsub command).  A Future object is returned
+        with the same properties as for nonblocking.
+        """
+        (cmds,n) = self.gen_args(*args)
+        stdout_filename = unique_filename_in(ex.exwd)
+        stderr_filename = unique_filename_in(ex.exwd)
+        cmds = ["bsub","-cwd",ex.exwd,"-o",stdout_filename,"-e",stderr_filename,
+                "-K","-r"] + cmds
+        n += 9
+        class Future(object):
+            def __init__(self):
+                self.program_output = None
+                self.return_value = None
+            def wait(self):
+                v.wait()
+                ex.report(self.program_output)
+                return self.return_value
+        f = Future()
+        v = threading.Event()
+        def g():
+            sp = subprocess.Popen(cmds, bufsize=-1)
+            return_code = sp.wait()
+            stdout = None
+            stderr = None
+            with open(os.path.join(ex.exwd,stdout_filename), 'r') as fo:
+                stdout = fo.readlines()
+            with open(os.path.join(ex.exwd,stderr_filename), 'r') as fe:
+                stderr = fe.readlines()
+            f.program_output = ProgramOutput(return_code, sp.pid,
+                                             cmds, stdout, stderr)
+            if return_code == 0:
+                f.return_value = cmds[n]
+            v.set()
+        a = threading.Thread(target=g)
+        a.start()
+        return(f)
 
-class ProgramFailed(Exception):
-    def __init__(self, output):
-        self.output = output
-
-def unique_filename_in(path):
-    def random_string():
-        return "".join([random.choice(string.letters + string.digits) 
-                        for x in range(20)])
-    filename = random_string()
-    while os.path.exists(os.path.join(path,filename)):
-        filename = random_string()
-    return filename
-
-@program
-def bowtie(index, reads):
-    sam_filename = unique_filename_in(os.getcwd())
-    return (["bowtie", "-Sra", index, reads,sam_filename], 4)
-
-@program
-def sam_to_bam(sam_filename):
-    bam_filename = unique_filename_in(os.getcwd())
-    return (["samtools","view","-b","-S","-o",bam_filename,sam_filename], 5)
-
-@program
-def touch():
-    filename = unique_filename_in(os.getcwd())
-    return (["touch",filename],1)
-
-@program
-def sleep(n):
-    return (["sleep", str(n)],0)
 
 class Execution(object):
     def __init__(self, lims, exwd):
@@ -126,6 +211,10 @@ def execution(lims = None):
     if lims != None:
         lims.write(ex)
     shutil.rmtree(ex.exwd)
+
+
+# MiniLIMS
+
 
 class MiniLims:
     def __init__(self, path):
@@ -227,16 +316,40 @@ class MiniLims:
         self.db.commit()
         return exid
 
-#m = MiniLims("test")
-#with execution(m) as ex:
-#    f = bowtie(ex, index = '../test_data/selected_transcripts', reads = '../test_data/reads-1-1')
-#    f = touch(ex)
-#    g = sleep.nonblocking(ex,1)
-#    ex.add(f, "Testing")
-#    print g.wait()
+# m = MiniLims("test")
+# with execution(m) as ex:
+# #    f = bowtie(ex, '../test_data/selected_transcripts', '../test_data/reads-1-1')
+#     f = touch(ex)
+#     g = sleep.lsf(ex,1)
+#     ex.add(f, "Testing")
+#     print g.wait()
     
-#with execution(m) as ex:
-#    print ex.use(1)
-#    print ex.exwd
+# with execution(m) as ex:
+#     print ex.use(1)
+#     print ex.exwd
         
+
+# Program library
+
+@program
+def bowtie(index, reads):
+    sam_filename = unique_filename_in(os.getcwd())
+    return (["bowtie", "-Sra", index, reads,sam_filename], 4)
+
+
+@program
+def sam_to_bam(sam_filename):
+    bam_filename = unique_filename_in(os.getcwd())
+    return (["samtools","view","-b","-S","-o",bam_filename,sam_filename], 5)
+
+
+@program
+def touch():
+    filename = unique_filename_in(os.getcwd())
+    return (["touch",filename],1)
+
+
+@program
+def sleep(n):
+    return (["sleep", str(n)],0)
 
