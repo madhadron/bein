@@ -1,22 +1,40 @@
 """bein - LIMS and workflow manager for bioinformatics
 by Frederick Ross <madhadron@gmail.com>
 
-Bein contains a miniature LIMS (Laboratory Information Management System) and a workflow manager.  It was written for the Bioinformatics and Biostatistics Core Facility of the Ecole Polytechnique Federale de Lausanne.  It is aimed at processes just complicated enough where the Unix shell becomes problematic, but not so large as to justify all the machinery of big workflow managers like KNIME or Galaxy.
+Bein contains a miniature LIMS (Laboratory Information Management
+System) and a workflow manager.  It was written for the Bioinformatics
+and Biostatistics Core Facility of the Ecole Polytechnique Federale de
+Lausanne.  It is aimed at processes just complicated enough where the
+Unix shell becomes problematic, but not so large as to justify all the
+machinery of big workflow managers like KNIME or Galaxy.
 
 There are three core classes you need to understand:
 
 program
 -------
-Programs are functions which are turned into callable objects by the @program decorator.  They provide a very clean way of binding programs into bein so that all the machinery of workflow management and LIMS functions properly.
+Programs are functions which are turned into callable objects by the
+@program decorator.  They provide a very clean way of binding programs
+into bein so that all the machinery of workflow management and LIMS
+functions properly.
 
 execution
 ---------
-The actual class is Execution, but it is generally created with the execution contextmanager.  An execution tracks all the information about a run of a given set of programs.  It corresponds roughly to a script in shell.
+The actual class is Execution, but it is generally created with the
+execution contextmanager.  An execution tracks all the information
+about a run of a given set of programs.  It corresponds roughly to a
+script in shell.
 
-Executions are run in a temporary directory.  The execution provides methods to pull in files from the LIMS for use, write files back to the LIMS, and tracks all arguments, pids, outputs, and exit codes of programs run during the execution.
+Executions are run in a temporary directory.  The execution provides
+methods to pull in files from the LIMS for use, write files back to
+the LIMS, and tracks all arguments, pids, outputs, and exit codes of
+programs run during the execution.
 
 MiniLIMS
-* Database and file directory object.  Never edit a MiniLIMS repository by hand.
+--------
+MiniLIMS represents a database and a directory of files.  The database
+stores metainformation about the files and records all executions run
+with this LIMS.  You can go back and examine the return code, stdout,
+stderr, imported files, etc. from any execution.
 """
 import subprocess
 import random
@@ -59,22 +77,66 @@ def unique_filename_in(path):
 class program(object):
     """Decorator to wrap make programs for use by bein.
 
-    * One paragraph overview of what's going on
-    * How to wrap a function
-    * How to call a wrapped function
+    Bein depends on external programs to do all its work.  In this
+    sense, it's a strange version of a shell.  To make it easy to bind
+    programs (generally one or two lines), we provide the @program
+    decorator.
 
-    The decorated function should return a two element tuple.  The
-    first element is a list of strings giving the command and
-    arguments to run.  The second is the position in that tuple that
-    should be returned if the program exits with return code 0.
+    To wrap a program, write a function that takes whatever arguments
+    you will need to vary in calling the program (for instance, the
+    filename for touch or the number of seconds to sleep for sleep).
+    This function should return a dictionary containing two keys,
+    "arguments" and "return_value".  "arguments" should point to a
+    list of strings which is the actual command and arguments to be
+    executed (["touch",filename] for touch, for instance).
+    "return_value" should point to a value to return, or a callable
+    object which takes a ProgramOutput object and returns the value
+    that will be passed back to the user when this program is run.
 
-    An extra argument is inserted before the argument list of the
-    generated function, which takes an execution.
+    For example, to wrap touch, we write a one argument function that
+    takes the filename of the file to touch, and apply the @program
+    decorator to it.
 
-    For example,
     @program
     def touch(filename):
-        return (["touch",filename], 1)
+        return {"arguments": ["touch",filename],
+                "return_value": filename}
+
+    Once we have such a function, how do we call it?  We can call it
+    directly, but @program inserts an additional argument at the
+    beginning of the argument list to take the execution the program
+    is run in.  Typically it will be run like
+
+    with execution(lims) as ex:
+        touch(ex, "myfile")
+
+    lims is a MiniLIMs object.  The ProgramOutput of touch is
+    automatically recorded to the execution 'ex' and stored in the
+    MiniLIMS.  The value returned by touch is "myfile", the name of
+    the touched file.
+
+    Often you want to call a function, but not block when it returns
+    so you can run several in parallel.  @program also creates a
+    method 'nonblocking' which does this.  The return value is a
+    Future object with a single method: wait().  When you call wait(),
+    it blocks until the program finishes, then returns the same value
+    that you would get from calling the function directly.  So to
+    touch two files, and not block until both commands have started,
+    you would write,
+
+    with execution(lims) as ex:
+        a = touch.nonblocking(ex, "myfile1")
+        b = touch.nonblocking(ex, "myfile2")
+        a.wait()
+        b.wait()
+
+    If you are on a system using the LSF batch submission system, you
+    can also call the lsf method with exactly the same arguments as
+    nonblocking to run the program as a batch job.
+
+    with execution(lims) as ex:
+        a = touch.lsf(ex, "myfile1")
+        a.wait()
     """
     def __init__(self, gen_args):
         self.gen_args = gen_args
@@ -82,41 +144,53 @@ class program(object):
     def __call__(self, ex, *args):
         """Run a program locally, and block until it completes.
 
-        In addition to the arguments to the decorated function, the
-        program object created by a decorator takes an Execution
-        object as an extra argument at the beginning of the argument
-        list.
-
-        * Add stuff about recording to execution object.
+        This form takes one argument before those to the decorated
+        function, an execution the program should be run as part of.
+        The return_code, pid, stdout, stderr, and command arguments of
+        the program are recorded to that execution, and thus to the
+        MiniLIMS object.
         """
-        (cmds,n) = self.gen_args(*args)
-        sp = subprocess.Popen(cmds, bufsize=-1, stdout=subprocess.PIPE,
+        d = self.gen_args(*args)
+        sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE,
                               cwd = ex.exwd)
         return_code = sp.wait()
-        ex.report(ProgramOutput(return_code, sp.pid,
-                                cmds, 
-                                sp.stdout.readlines(),   # stdout and stderr
-                                sp.stderr.readlines()))  # are lists of strings ending with newlines
+        po = ProgramOutput(return_code, sp.pid,
+                                d["arguments"], 
+                                sp.stdout.readlines(),  # stdout and stderr
+                                sp.stderr.readlines())  # are lists of strings ending with newlines
+        ex.report(po)
         if return_code == 0:
-            return cmds[n]
+            z = d["return_value"]
+            if callable(z):
+                return z(po)
+            else:
+                return z
         else: 
-            raise ProgramFailed(ProgramOutput(return_code, sp.pid, cmds, 
-                                              sp.stdout.readlines(), 
-                                              sp.stderr.readlines()))
+            raise ProgramFailed(po)
 
     def nonblocking(self, ex, *args):
-        """Run a program locally, but return a Future object instead of blocking.
+        """Run a program, but return a Future object instead of blocking.
 
-        Like __call__, takes an Execution as an extra, initial
-        argument before the arguments to the decorated function.
-        Instead of blocking until the program completes, it runs it in
-        a separate thread, and returns a Future object which lets you
-        block when you wish.  The future object has a method wait().
-        When called, it blocks until the program finishes running,
-        then returns the same value as __call__ would have.
+        Like __call__, nonblocking takes an Execution as an extra,
+        initial argument before the arguments to the decorated
+        function.  However, instead of blocking, it starts the program
+        in a separate thread, and returns an object which lets the
+        user choose when to wait for the program by calling its wait()
+        method.  When wait() is called, the thread blocks, and the
+        program is recorded in the execution and its value returned as
+        if the use had called __call__ directory.  Thus,
+
+        with execution(lims) as ex:
+            f = touch("boris")
+
+        is exactly equivalent to
+        
+        with execution(lims) as ex:
+            a = touch.nonblocking("boris")
+            f = a.wait()
         """
-        (cmds,n) = self.gen_args(*args)
+        d = self.gen_args(*args)
         class Future(object):
             def __init__(self):
                 self.program_output = None
@@ -128,35 +202,38 @@ class program(object):
         f = Future()
         v = threading.Event()
         def g():
-            sp = subprocess.Popen(cmds, bufsize=-1, stdout=subprocess.PIPE,
+            sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
                                   cwd = ex.exwd)
             return_code = sp.wait()
             f.program_output = ProgramOutput(return_code, sp.pid,
-                                             cmds, 
+                                             d["arguments"], 
                                              sp.stdout.readlines(), 
                                              sp.stderr.readlines())
             if return_code == 0:
-                f.return_value = cmds[n]
+                z = d["return_value"]
+                if callable(z):
+                    f.return_value = z(f.program_output)
+                else:
+                    f.return_value = z
             v.set()
         a = threading.Thread(target=g)
         a.start()
         return(f)
 
     def lsf(self, ex, *args):
-        """Run a program via the LSF batch queue, but do not block locally.
+        """Run a program via the LSF batch queue.
 
-        For the programmer, this call appears identical to
+        For the programmer, this method appears identical to
         nonblocking, except that the program is run via the LSF batch
-        system (using the bsub command).  A Future object is returned
-        with the same properties as for nonblocking.
+        system (using the bsub command) instead of as a local
+        subprocess.
         """
-        (cmds,n) = self.gen_args(*args)
+        d = self.gen_args(*args)
         stdout_filename = unique_filename_in(ex.exwd)
         stderr_filename = unique_filename_in(ex.exwd)
         cmds = ["bsub","-cwd",ex.exwd,"-o",stdout_filename,"-e",stderr_filename,
-                "-K","-r"] + cmds
-        n += 9
+                "-K","-r"] + d["arguments"]
         class Future(object):
             def __init__(self):
                 self.program_output = None
@@ -179,7 +256,11 @@ class program(object):
             f.program_output = ProgramOutput(return_code, sp.pid,
                                              cmds, stdout, stderr)
             if return_code == 0:
-                f.return_value = cmds[n]
+                z = d["return_value"]
+                if callable(z):
+                    f.return_value = z(f.program_output)
+                else:
+                    f.return_value = z
             v.set()
         a = threading.Thread(target=g)
         a.start()
@@ -390,10 +471,11 @@ class MiniLIMS:
 
     def copy_file(self, fileid):
         try:
-            [(external_name, repository_name, description)] = [x for x in self.db.execute("select external_name,repository_name,description from file where id = ?", (fileid, ))]
+            sql = "select external_name,repository_name,description from file where id = ?"
+            [(external_name, repository_name, description)] = [x for x in self.db.execute(sql, (fileid, ))]
             new_repository_name = unique_filename_in(self.file_path)
-            [x for x in self.db.execute("insert into file(external_name,repository_name,origin,origin_value) values (?,?,?,?)",
-                                        (external_name, new_repository_name, 'copy', fileid))]
+            sql = "insert into file(external_name,repository_name,origin,origin_value) values (?,?,?,?)"
+            [x for x in self.db.execute(sql, (external_name, new_repository_name, 'copy', fileid))]
             [new_id] = [x for (x,) in self.db.execute("select last_insert_rowid()")]
             shutil.copyfile(os.path.join(self.file_path, repository_name),
                             os.path.join(self.file_path, new_repository_name))
@@ -401,6 +483,27 @@ class MiniLIMS:
             return new_id
         except ValueError, v:
             raise ValueError("No such file id " + str(fileid))
+    
+    def delete_file(self, fileid):
+        try:
+            sql = "select repository_name from file where id = ?"
+            [repository_name] = [x for (x,) in self.db.execute(sql, (fileid,))]
+            sql = "delete from file where id = ?"
+            [x for (x,) in self.db.execute(sql, (fileid, ))]
+            os.remove(os.path.join(self.file_path, repository_name))
+            self.db.commit()
+        except ValueError:
+            raise ValueError("No such file id " + str(fileid))
+
+    def delete_execution(self, execution_id):
+        try:
+            [x for x in self.db.execute("delete from argument where execution = ?", (execution_id,))]
+            [x for x in self.db.execute("delete from program where execution = ?", (execution_id,))]
+            [x for x in self.db.execute("delete from execution where id = ?", (execution_id,))]
+            self.db.commit()
+        except ValueError, v:
+            raise ValueError("No such execution id " + str(execution_id))
+
 
 
 def get_ex():
@@ -408,11 +511,8 @@ def get_ex():
     with execution(m) as ex:
 # #    f = bowtie(ex, '../test_data/selected_transcripts', '../test_data/reads-1-1')
         f = touch(ex)
-    return ex
-     
-#     g = sleep.lsf(ex,1)
-#     ex.add(f, "Testing")
-#     print g.wait()
+        g = sleep.nonblocking(ex,1)
+        print g.wait()
     
 #with execution(m) as ex:
 #     print ex.use(1)
@@ -424,22 +524,26 @@ def get_ex():
 @program
 def bowtie(index, reads):
     sam_filename = unique_filename_in(os.getcwd())
-    return (["bowtie", "-Sra", index, reads,sam_filename], 4)
+    return {"arguments": ["bowtie", "-Sra", index, reads,sam_filename],
+            "return_value": sam_filename}
 
 
 @program
 def sam_to_bam(sam_filename):
     bam_filename = unique_filename_in(os.getcwd())
-    return (["samtools","view","-b","-S","-o",bam_filename,sam_filename], 5)
+    return {"arguments": ["samtools","view","-b","-S","-o",bam_filename,sam_filename],
+            "return_value": bam_filename}
 
 
 @program
 def touch():
     filename = unique_filename_in(os.getcwd())
-    return (["touch",filename],1)
+    return {"arguments": ["touch",filename],
+            "return_value": filename}
 
 
 @program
 def sleep(n):
-    return (["sleep", str(n)],0)
+    return {"arguments": ["sleep", str(n)],
+            "return_value": lambda q: n}
 

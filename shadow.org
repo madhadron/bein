@@ -21,7 +21,7 @@ Wrote search_files.  Now executions?
 ** Add copy, delete, and import operations to MiniLIMS
 *** Just a few operations.
 *** DONE Write copy file method for MiniLIMS
-*** TODO Write delete file method for MiniLIMS
+*** DONE Write delete file method for MiniLIMS
 *** TODO Write delete execution method for MiniLIMS
 *** TODO Write import file method for MiniLIMS
 ** Add configuration files
