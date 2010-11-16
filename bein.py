@@ -350,11 +350,13 @@ def execution(lims = None):
     execution_dir = unique_filename_in(os.getcwd())
     os.mkdir(os.path.join(os.getcwd(), execution_dir))
     ex = Execution(lims,os.path.join(os.getcwd(), execution_dir))
+    os.chdir(os.path.join(os.getcwd(), execution_dir))
     yield ex
     ex.finish()
     if lims != None:
         lims.write(ex)
     shutil.rmtree(ex.exwd)
+    os.chdir("..")
 
 
 class MiniLIMS:
@@ -392,7 +394,7 @@ class MiniLIMS:
     """
     def __init__(self, path):
         self.db = sqlite3.connect(path)
-        self.file_path = path +".files"
+        self.file_path = os.path.abspath(path +".files")
         if not(os.path.exists(self.file_path)):
             self.initialize_database(self.db)
             os.mkdir(self.file_path)
