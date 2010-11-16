@@ -30,9 +30,10 @@ Wrote search_files.  Now executions?
 ** Bind samtools and more programs in
 *** Try a couple things for return values from programs.
 *** Go through the program library I wrote for Scheme bein, and translate stuff over.
+** Write a README file for the distribution
 ** Write a manual
 *** Outline, rough draft, edit
-** Document the code
+** DONE Document the code
 *** Add docstrings to everything, rearrange it for clarity.  Write some overall structure comments.
 ** Write unit tests
 *** How do I unit test this?  Set up the mocks...
