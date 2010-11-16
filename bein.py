@@ -791,15 +791,15 @@ class MiniLIMS:
                     dst)
 
 
-# def get_ex():
-#     m = MiniLIMS("test")
-#     with execution(m) as ex:
-# # #    f = bowtie(ex, '../test_data/selected_transcripts', '../test_data/reads-1-1')
-#         f = touch(ex)
-#         g = sleep.nonblocking(ex,1)
-#         ex.add(f)
-#         ex.use(1)
-#         print g.wait()
+def get_ex():
+    m = MiniLIMS("test")
+    with execution(m) as ex:
+        # # #    f = bowtie(ex, '../test_data/selected_transcripts', '../test_data/reads-1-1')
+        f = touch(ex)
+        g = sleep.nonblocking(ex,1)
+        ex.add(f)
+        ex.use(1)
+        print g.wait()
     
 #with execution(m) as ex:
 #     print ex.use(1)
