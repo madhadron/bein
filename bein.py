@@ -388,6 +388,7 @@ class MiniLIMS:
        * delete_file
        * delete_execution
        * import_file
+       * export_file
     """
     def __init__(self, path):
         self.db = sqlite3.connect(path)
