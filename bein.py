@@ -395,9 +395,9 @@ class MiniLIMS:
         if not(os.path.exists(self.file_path)):
             self.initialize_database(self.db)
             os.mkdir(self.file_path)
-        self.db.create_function("importfile",1,self.copy_file_to_repository)
-        self.db.create_function("deletefile",1,self.delete_repository_file)
-        self.db.create_function("exportfile",2,self.export_file_from_repository)
+        self.db.create_function("importfile",1,self._copy_file_to_repository)
+        self.db.create_function("deletefile",1,self._delete_repository_file)
+        self.db.create_function("exportfile",2,self._export_file_from_repository)
 
     def initialize_database(self, db):
         """Sets up a new MiniLIMS database.
@@ -539,7 +539,7 @@ class MiniLIMS:
         """)
         self.db.commit()
 
-    def copy_file_to_repository(self,src):
+    def _copy_file_to_repository(self,src):
         """Copy a file src into the MiniLIMS repository.
         
         src can be a fairly arbitrary path, either from the CWD, or
@@ -550,7 +550,7 @@ class MiniLIMS:
         shutil.copyfile(src,os.path.abspath(os.path.join(self.file_path,filename)))
         return filename
 
-    def delete_repository_file(self,filename):
+    def _delete_repository_file(self,filename):
         """Delete a file from the MiniLIMS repository.
 
         This function should only be called from SQLite3, not from Python.
@@ -558,7 +558,7 @@ class MiniLIMS:
         os.remove(os.path.join(self.file_path,filename))
         return None
 
-    def export_file_from_repository(self,fileid,dst):
+    def _export_file_from_repository(self,fileid,dst):
         """Write a file with id fileid to the directory dst.
 
         This function should only be called from SQLite3, not Python.
@@ -676,18 +676,29 @@ class MiniLIMS:
         """
         with_text = with_text != None and '%'+with_text+'%' or None
         sql = """select id from execution where 
-                 (started_at <= ? or ? is null) and (started_at >= ? or ? is null) and
-                 (finished_at <= ? or ? is null) and (finished_at >= ? or ? is null) and
+                 (started_at <= ? or ? is null) and 
+                 (started_at >= ? or ? is null) and
+                 (finished_at <= ? or ? is null) and 
+                 (finished_at >= ? or ? is null) and
                  (description like ? or ? is null)
               """
-        matching_executions = [x for (x,) in self.db.execute(sql, (started_before, started_before,
-                                                                   started_after, started_after,
-                                                                   ended_before, ended_before,
-                                                                   ended_after, ended_after,
-                                                                   with_text, with_text))]
+        matching_executions = [x for (x,) in 
+                               self.db.execute(sql, 
+                                               (started_before,
+                                                started_before,
+                                                started_after,
+                                                started_after,
+                                                ended_before,
+                                                ended_before,
+                                                ended_after, 
+                                                ended_after,
+                                                with_text,
+                                                with_text))]
         if with_text != None:
-            sql = """select distinct execution from argument where argument like ?"""
-            matching_programs = [x for (x,) in self.db.execute(sql, (with_text,))]
+            sql = """select distinct execution from argument
+                     where argument like ?"""
+            matching_programs = [x for (x,) in 
+                                 self.db.execute(sql, (with_text,))]
         else:
             matching_programs = []
         return list(set(matching_executions+matching_programs))
@@ -701,12 +712,19 @@ class MiniLIMS:
         immutable file.
         """
         try:
-            sql = "select external_name,repository_name,description from file where id = ?"
-            [(external_name, repository_name, description)] = [x for x in self.db.execute(sql, (fileid, ))]
+            sql = """select external_name,repository_name,description 
+                     from file where id = ?"""
+            [(external_name, 
+              repository_name, 
+              description)] = [x for x in self.db.execute(sql, (fileid, ))]
             new_repository_name = unique_filename_in(self.file_path)
-            sql = "insert into file(external_name,repository_name,origin,origin_value) values (?,?,?,?)"
-            [x for x in self.db.execute(sql, (external_name, new_repository_name, 'copy', fileid))]
-            [new_id] = [x for (x,) in self.db.execute("select last_insert_rowid()")]
+            sql = """insert into file(external_name,repository_name,
+                                      origin,origin_value) values (?,?,?,?)"""
+            [x for x in self.db.execute(sql, (external_name, 
+                                              new_repository_name, 
+                                              'copy', fileid))]
+            [new_id] = [x for (x,) in 
+                        self.db.execute("select last_insert_rowid()")]
             shutil.copyfile(os.path.join(self.file_path, repository_name),
                             os.path.join(self.file_path, new_repository_name))
             self.db.commit()
@@ -729,9 +747,12 @@ class MiniLIMS:
     def delete_execution(self, execution_id):
         """Delete an execution from the MiniLIMS repository."""
         try:
-            [x for x in self.db.execute("delete from argument where execution = ?", (execution_id,))]
-            [x for x in self.db.execute("delete from program where execution = ?", (execution_id,))]
-            [x for x in self.db.execute("delete from execution where id = ?", (execution_id,))]
+            self.db.execute("delete from argument where execution = ?",
+                            (execution_id,))
+            self.db.execute("delete from program where execution = ?", 
+                            (execution_id,))
+            self.db.execute("delete from execution where id = ?", 
+                            (execution_id,))
             self.db.commit()
         except ValueError, v:
             raise ValueError("No such execution id " + str(execution_id))
@@ -744,25 +765,40 @@ class MiniLIMS:
         the file in the repository.  import_file returns the file id
         in the repository of the newly imported file.
         """
-        [x for x in self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value)
-                                       values (?,importfile(?),?,?,?)""",
-                                    (os.path.basename(src),os.path.abspath(src),
-                                     description,'import',None))]
+        self.db.execute("""insert into file(external_name,repository_name,
+                                            description,origin,origin_value)
+                           values (?,importfile(?),?,?,?)""",
+                        (os.path.basename(src),os.path.abspath(src),
+                         description,'import',None))
         self.db.commit()
-        return [x for (x,) in self.db.execute("""select last_insert_rowid()""")][0]
+        return [x for (x,) in 
+                self.db.execute("""select last_insert_rowid()""")][0]
         
+    def export_file(self, fileid, dst):
+        """Write fileid from the MiniLIMS repository to dst.
+
+        dst can be either a directory, in which case the file will
+        have its repository name in the new directory, or can specify
+        a filename, in which case the file will be copied to that
+        filename.
+        """
+        filename = [x for (x,) in 
+                    self.db.execute("""select repository_name
+                                       from file where id = ?""",
+                                    (fileid, ))][0]
+        shutil.copy(os.path.join(self.file_path,filename),
+                    dst)
 
 
-
-def get_ex():
-    m = MiniLIMS("test")
-    with execution(m) as ex:
-# #    f = bowtie(ex, '../test_data/selected_transcripts', '../test_data/reads-1-1')
-        f = touch(ex)
-        g = sleep.nonblocking(ex,1)
-        ex.add(f)
-        ex.use(1)
-        print g.wait()
+# def get_ex():
+#     m = MiniLIMS("test")
+#     with execution(m) as ex:
+# # #    f = bowtie(ex, '../test_data/selected_transcripts', '../test_data/reads-1-1')
+#         f = touch(ex)
+#         g = sleep.nonblocking(ex,1)
+#         ex.add(f)
+#         ex.use(1)
+#         print g.wait()
     
 #with execution(m) as ex:
 #     print ex.use(1)
