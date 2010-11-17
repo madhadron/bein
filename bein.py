@@ -351,12 +351,16 @@ def execution(lims = None):
     os.mkdir(os.path.join(os.getcwd(), execution_dir))
     ex = Execution(lims,os.path.join(os.getcwd(), execution_dir))
     os.chdir(os.path.join(os.getcwd(), execution_dir))
-    yield ex
-    ex.finish()
-    if lims != None:
-        lims.write(ex)
-    shutil.rmtree(ex.exwd)
-    os.chdir("..")
+    try:
+        yield ex
+    except Exception, e:
+        raise e
+    finally:
+        ex.finish()
+        if lims != None:
+            lims.write(ex)
+        shutil.rmtree(ex.exwd)
+        os.chdir("..")
 
 
 class MiniLIMS:
@@ -803,6 +807,11 @@ def get_ex():
         ex.use(1)
         print g.wait()
     
+def get_ex1():
+    m = MiniLIMS("test")
+    with execution(m) as ex:
+        f = touch(ex, 'asdf/asdf')
+
 #with execution(m) as ex:
 #     print ex.use(1)
 #     print ex.exwd
@@ -825,8 +834,9 @@ def sam_to_bam(sam_filename):
 
 
 @program
-def touch():
-    filename = unique_filename_in(os.getcwd())
+def touch(filename = None):
+    if filename == None:
+        filename = unique_filename_in(os.getcwd())
     return {"arguments": ["touch",filename],
             "return_value": filename}
 
