@@ -359,7 +359,7 @@ def execution(lims = None):
         ex.finish()
         if lims != None:
             lims.write(ex)
-        shutil.rmtree(ex.exwd)
+        shutil.rmtree(ex.exwd, ignore_errors=True)
         os.chdir("..")
 
 
