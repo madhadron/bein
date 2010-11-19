@@ -319,19 +319,16 @@ class Execution(object):
         """Fetch a file from the MiniLIMS repository.
 
         fileid should be an integer assigned to a file in the MiniLIMS
+        repository, or a string giving a file alias in the MiniLIMS 
         repository.  The file is copied into the execution's working
         directory with a unique filename.  'use' returns the unique
         filename it copied the file into.
         """
-        if isinstance(fileid, str):
-            x = self.lims.db.execute("select file from file_alias where alias=?", (fileid,)).fetchone()
-            if x == None:
-                raise ValueError("No such file alias: " + fileid)
-            else:
-                fileid = x[0]
+        rfile = self.lims.resolve_alias(fileid)
         try:
-            filename = [x for (x,) in self.lims.db.execute("select exportfile(?,?)", 
-                                                           (fileid, self.exwd))][0]
+            filename = [x for (x,) in 
+                        self.lims.db.execute("select exportfile(?,?)", 
+                                             (rfile, self.exwd))][0]
             self.used_files.append(fileid)
             return filename
         except ValueError, v:
@@ -721,7 +718,7 @@ class MiniLIMS:
             matching_programs = []
         return list(set(matching_executions+matching_programs))
 
-    def copy_file(self, fileid):
+    def copy_file(self, file_or_alias):
         """Copy the given file in the MiniLIMS repository.
 
         A copy of the file corresponding to the given fileid is made
@@ -729,6 +726,7 @@ class MiniLIMS:
         returned.  This is most useful to create a mutable copy of an
         immutable file.
         """
+        fileid = self.resolve_alias(file_or_alias)
         try:
             sql = """select external_name,repository_name,description 
                      from file where id = ?"""
@@ -750,8 +748,9 @@ class MiniLIMS:
         except ValueError, v:
             raise ValueError("No such file id " + str(fileid))
     
-    def delete_file(self, fileid):
+    def delete_file(self, file_or_alias):
         """Delete a file from the repository."""
+        fileid = self.resolve_alias(file_or_alias)
         try:
             sql = "select repository_name from file where id = ?"
             [repository_name] = [x for (x,) in self.db.execute(sql, (fileid,))]
@@ -792,7 +791,7 @@ class MiniLIMS:
         return [x for (x,) in 
                 self.db.execute("""select last_insert_rowid()""")][0]
         
-    def export_file(self, fileid, dst):
+    def export_file(self, file_or_alias, dst):
         """Write fileid from the MiniLIMS repository to dst.
 
         dst can be either a directory, in which case the file will
@@ -800,6 +799,7 @@ class MiniLIMS:
         a filename, in which case the file will be copied to that
         filename.
         """
+        fileid = self.resolve_alias(file_or_alias)
         filename = [x for (x,) in 
                     self.db.execute("""select repository_name
                                        from file where id = ?""",
@@ -807,11 +807,36 @@ class MiniLIMS:
         shutil.copy(os.path.join(self.file_path,filename),
                     dst)
 
+    def resolve_alias(self, alias):
+        """Resolve an alias to an integer file id.
+
+        If an integer is passed to resolve_alias, it is returned as is,
+        so this method can be used without worry any time any alias
+        might have to be resolved.        
+        """
+        if isinstance(alias, int):
+            return alias
+        elif isinstance(alias, str):
+            x = self.db.execute("select file from file_alias where alias=?", (alias,)).fetchone()
+            if x == None:
+                raise ValueError("No such file alias: " + alias)
+            else:
+                return x[0]
+
     def add_alias(self, fileid, alias):
+        """Make the string 'alias' an alias for fileid in the repository.
+
+        An alias can be used in place of an integer file id in 
+        all methods that take a file id.
+        """
         self.db.execute("""insert into file_alias(alias,file) values (?,?)""",
-                        (alias, fileid))
+                        (alias, self.resolve_alias(fileid)))
 
     def delete_alias(self, alias):
+        """Delete the file alias 'alias' from the repository.
+
+        The file itself is untouched.  This only affects the alias.
+        """
         self.db.execute("""delete from file_alias where alias = ?""", (alias,))
 
 
