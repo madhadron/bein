@@ -311,21 +311,33 @@ class Execution(object):
         Note that the file is not actually added to the repository
         until the execution finishes.
         """
-        self.files.append((filename,description))
+        if filename == None:
+            if description == "":
+                raise("Tried to add None to repository.")
+            else:
+                raise("Tried to add None with descrition '" + description +"' to repository.")
+        else:
+            self.files.append((filename,description))
     def finish(self):
         """Set the time when the execution finished."""
         self.finished_at = int(time.time())
-    def use(self, fileid):
+    def use(self, file_or_alias):
         """Fetch a file from the MiniLIMS repository.
 
         fileid should be an integer assigned to a file in the MiniLIMS
+        repository, or a string giving a file alias in the MiniLIMS 
         repository.  The file is copied into the execution's working
         directory with a unique filename.  'use' returns the unique
         filename it copied the file into.
         """
+        fileid = self.lims.resolve_alias(file_or_alias)
         try:
-            filename = [x for (x,) in self.lims.db.execute("select exportfile(?,?)", 
-                                                           (fileid, self.exwd))][0]
+            filename = [x for (x,) in 
+                        self.lims.db.execute("select exportfile(?,?)", 
+                                             (fileid, self.exwd))][0]
+            for (f,t) in self.lims.associated_files_of(fileid):
+                self.lims.db.execute("select exportfile(?,?)",
+                                     (f, os.path.join(self.exwd,t % filename)))
             self.used_files.append(fileid)
             return filename
         except ValueError, v:
@@ -359,11 +371,11 @@ def execution(lims = None):
         ex.finish()
         if lims != None:
             lims.write(ex)
-        shutil.rmtree(ex.exwd)
+        shutil.rmtree(ex.exwd, ignore_errors=True)
         os.chdir("..")
 
 
-class MiniLIMS:
+class MiniLIMS(object):
     """Encapsulates a database and directory to track executions and files.
 
     A MiniLIMS repository consists of a SQLite database and a
@@ -395,6 +407,12 @@ class MiniLIMS:
        * delete_execution
        * import_file
        * export_file
+       * resolve_alias
+       * add_alias
+       * resolve_alias
+       * associate_file
+       * delete_file_association
+       * associated_files_of
     """
     def __init__(self, path):
         self.db = sqlite3.connect(path)
@@ -450,6 +468,18 @@ class MiniLIMS:
         CREATE TABLE execution_use (
                execution integer references execution(id),
                file integer references file(id)
+        )""")
+        self.db.execute("""
+        CREATE TABLE file_alias (
+               alias text primary key,
+               file integer references file(id)
+        )""")
+        self.db.execute("""
+        CREATE TABLE file_association (
+               id integer primary key,
+               fileid integer references file(id) not null,
+               associated_to integer references file(id) not null,
+               template text not null
         )""")
         self.db.execute("""
         CREATE TRIGGER prevent_repository_name_change BEFORE UPDATE ON file
@@ -570,7 +600,10 @@ class MiniLIMS:
 
         This function should only be called from SQLite3, not Python.
         """
-        filename = unique_filename_in(dst)
+        if os.path.isdir(dst):
+            filename = unique_filename_in(dst)
+        else:
+            filename = ""
         try:
             [repository_filename] = [x for (x,) in self.db.execute("select repository_name from file where id=?", 
                                                                    (fileid,))]
@@ -710,7 +743,7 @@ class MiniLIMS:
             matching_programs = []
         return list(set(matching_executions+matching_programs))
 
-    def copy_file(self, fileid):
+    def copy_file(self, file_or_alias):
         """Copy the given file in the MiniLIMS repository.
 
         A copy of the file corresponding to the given fileid is made
@@ -718,6 +751,7 @@ class MiniLIMS:
         returned.  This is most useful to create a mutable copy of an
         immutable file.
         """
+        fileid = self.resolve_alias(file_or_alias)
         try:
             sql = """select external_name,repository_name,description 
                      from file where id = ?"""
@@ -739,8 +773,9 @@ class MiniLIMS:
         except ValueError, v:
             raise ValueError("No such file id " + str(fileid))
     
-    def delete_file(self, fileid):
+    def delete_file(self, file_or_alias):
         """Delete a file from the repository."""
+        fileid = self.resolve_alias(file_or_alias)
         try:
             sql = "select repository_name from file where id = ?"
             [repository_name] = [x for (x,) in self.db.execute(sql, (fileid,))]
@@ -781,7 +816,7 @@ class MiniLIMS:
         return [x for (x,) in 
                 self.db.execute("""select last_insert_rowid()""")][0]
         
-    def export_file(self, fileid, dst):
+    def export_file(self, file_or_alias, dst):
         """Write fileid from the MiniLIMS repository to dst.
 
         dst can be either a directory, in which case the file will
@@ -789,6 +824,7 @@ class MiniLIMS:
         a filename, in which case the file will be copied to that
         filename.
         """
+        fileid = self.resolve_alias(file_or_alias)
         filename = [x for (x,) in 
                     self.db.execute("""select repository_name
                                        from file where id = ?""",
@@ -796,6 +832,77 @@ class MiniLIMS:
         shutil.copy(os.path.join(self.file_path,filename),
                     dst)
 
+    def resolve_alias(self, alias):
+        """Resolve an alias to an integer file id.
+
+        If an integer is passed to resolve_alias, it is returned as is,
+        so this method can be used without worry any time any alias
+        might have to be resolved.        
+        """
+        if isinstance(alias, int):
+            return alias
+        elif isinstance(alias, str):
+            x = self.db.execute("select file from file_alias where alias=?", (alias,)).fetchone()
+            if x == None:
+                raise ValueError("No such file alias: " + alias)
+            else:
+                return x[0]
+
+    def add_alias(self, fileid, alias):
+        """Make the string 'alias' an alias for fileid in the repository.
+
+        An alias can be used in place of an integer file id in 
+        all methods that take a file id.
+        """
+        self.db.execute("""insert into file_alias(alias,file) values (?,?)""",
+                        (alias, self.resolve_alias(fileid)))
+        self.db.commit()
+
+    def delete_alias(self, alias):
+        """Delete the file alias 'alias' from the repository.
+
+        The file itself is untouched.  This only affects the alias.
+        """
+        self.db.execute("""delete from file_alias where alias = ?""", (alias,))
+        self.db.commit()
+
+    def associated_files_of(self, file_or_alias):
+        """Find all files associated to 'file_or_alias'.
+
+        Return a list of (fileid, template) of all files associated 
+        to 'file_or_alias'.
+        """
+        f = self.resolve_alias(file_or_alias)
+        return self.db.execute("""select fileid,template from file_association where associated_to = ?""", (f,)).fetchall()
+
+    def associate_file(self, file_or_alias, associate_to, template):
+        """Add a file association from 'file_or_alias' to 'associate_to'.
+
+        When the file 'associate_to' is used in an execution, 
+        'file_or_alias' is also used, and named according to 'template'. 
+        'template' should be a string containing %s, which will be
+        replaced with the name 'associate_to' is copied to.  So if
+        'associate_to' is copied to X in the working directory, and
+        the template is "%s.idx", then 'file_or_alias' is also copied 
+        to X.idx.
+        """
+        src = self.resolve_alias(file_or_alias)
+        dst = self.resolve_alias(associate_to)
+        if template.find("%s") == -1:
+            raise ValueError("Template of a file association must contain exactly one %s.")
+        else:
+            self.db.execute("""insert into file_association(fileid,associated_to,template) values (?,?,?)""", (src, dst, template))
+            self.db.commit()
+            
+    def delete_file_association(self, file_or_alias, associated_to):
+        """Remove the file association from 'file_or_alias' to 'associated_to'.
+
+        Both fields can be either an integer or an alias string.
+        """
+        src = self.resolve_alias(file_or_alias)
+        dst = self.resolve_alias(associated_to)
+        self.db.execute("""delete from file_association where fileid=? and associated_to=?""", (src,dst))
+        self.db.commit()
 
 def get_ex():
     m = MiniLIMS("test")
