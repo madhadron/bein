@@ -410,6 +410,9 @@ class MiniLIMS(object):
        * resolve_alias
        * add_alias
        * resolve_alias
+       * associate_file
+       * delete_file_association
+       * associated_files_of
     """
     def __init__(self, path):
         self.db = sqlite3.connect(path)
