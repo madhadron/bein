@@ -315,7 +315,7 @@ class Execution(object):
     def finish(self):
         """Set the time when the execution finished."""
         self.finished_at = int(time.time())
-    def use(self, fileid):
+    def use(self, file_or_alias):
         """Fetch a file from the MiniLIMS repository.
 
         fileid should be an integer assigned to a file in the MiniLIMS
@@ -324,11 +324,11 @@ class Execution(object):
         directory with a unique filename.  'use' returns the unique
         filename it copied the file into.
         """
-        rfile = self.lims.resolve_alias(fileid)
+        fileid = self.lims.resolve_alias(file_or_alias)
         try:
             filename = [x for (x,) in 
                         self.lims.db.execute("select exportfile(?,?)", 
-                                             (rfile, self.exwd))][0]
+                                             (fileid, self.exwd))][0]
             self.used_files.append(fileid)
             return filename
         except ValueError, v:
@@ -366,7 +366,7 @@ def execution(lims = None):
         os.chdir("..")
 
 
-class MiniLIMS:
+class MiniLIMS(object):
     """Encapsulates a database and directory to track executions and files.
 
     A MiniLIMS repository consists of a SQLite database and a
@@ -398,6 +398,9 @@ class MiniLIMS:
        * delete_execution
        * import_file
        * export_file
+       * resolve_alias
+       * add_alias
+       * resolve_alias
     """
     def __init__(self, path):
         self.db = sqlite3.connect(path)
