@@ -323,6 +323,12 @@ class Execution(object):
         directory with a unique filename.  'use' returns the unique
         filename it copied the file into.
         """
+        if isinstance(fileid, str):
+            x = self.lims.db.execute("select file from file_alias where alias=?", (fileid,)).fetchone()
+            if x == None:
+                raise ValueError("No such file alias: " + fileid)
+            else:
+                fileid = x[0]
         try:
             filename = [x for (x,) in self.lims.db.execute("select exportfile(?,?)", 
                                                            (fileid, self.exwd))][0]
@@ -449,6 +455,11 @@ class MiniLIMS:
         self.db.execute("""
         CREATE TABLE execution_use (
                execution integer references execution(id),
+               file integer references file(id)
+        )""")
+        self.db.execute("""
+        CREATE TABLE file_alias (
+               alias text primary key,
                file integer references file(id)
         )""")
         self.db.execute("""
@@ -795,6 +806,13 @@ class MiniLIMS:
                                     (fileid, ))][0]
         shutil.copy(os.path.join(self.file_path,filename),
                     dst)
+
+    def add_alias(self, fileid, alias):
+        self.db.execute("""insert into file_alias(alias,file) values (?,?)""",
+                        (alias, fileid))
+
+    def delete_alias(self, alias):
+        self.db.execute("""delete from file_alias where alias = ?""", (alias,))
 
 
 def get_ex():
