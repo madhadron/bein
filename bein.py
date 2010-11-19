@@ -312,7 +312,7 @@ class Execution(object):
         until the execution finishes.
         """
         if filename == None:
-            if description = "":
+            if description == "":
                 raise("Tried to add None to repository.")
             else:
                 raise("Tried to add None with descrition '" + description +"' to repository.")
@@ -335,6 +335,9 @@ class Execution(object):
             filename = [x for (x,) in 
                         self.lims.db.execute("select exportfile(?,?)", 
                                              (fileid, self.exwd))][0]
+            for (f,t) in self.lims.associated_files_of(fileid):
+                self.lims.db.execute("select exportfile(?,?)",
+                                     (f, os.path.join(self.exwd,t % filename)))
             self.used_files.append(fileid)
             return filename
         except ValueError, v:
@@ -469,6 +472,13 @@ class MiniLIMS(object):
                file integer references file(id)
         )""")
         self.db.execute("""
+        CREATE TABLE file_association (
+               id integer primary key,
+               fileid integer references file(id) not null,
+               associated_to integer references file(id) not null,
+               template text not null
+        )""")
+        self.db.execute("""
         CREATE TRIGGER prevent_repository_name_change BEFORE UPDATE ON file
         FOR EACH ROW WHEN (OLD.repository_name != NEW.repository_name) BEGIN
              SELECT RAISE(FAIL, 'Cannot change the repository name of a file.');
@@ -587,7 +597,10 @@ class MiniLIMS(object):
 
         This function should only be called from SQLite3, not Python.
         """
-        filename = unique_filename_in(dst)
+        if os.path.isdir(dst):
+            filename = unique_filename_in(dst)
+        else:
+            filename = ""
         try:
             [repository_filename] = [x for (x,) in self.db.execute("select repository_name from file where id=?", 
                                                                    (fileid,))]
@@ -840,6 +853,7 @@ class MiniLIMS(object):
         """
         self.db.execute("""insert into file_alias(alias,file) values (?,?)""",
                         (alias, self.resolve_alias(fileid)))
+        self.db.commit()
 
     def delete_alias(self, alias):
         """Delete the file alias 'alias' from the repository.
@@ -847,7 +861,45 @@ class MiniLIMS(object):
         The file itself is untouched.  This only affects the alias.
         """
         self.db.execute("""delete from file_alias where alias = ?""", (alias,))
+        self.db.commit()
 
+    def associated_files_of(self, file_or_alias):
+        """Find all files associated to 'file_or_alias'.
+
+        Return a list of (fileid, template) of all files associated 
+        to 'file_or_alias'.
+        """
+        f = self.resolve_alias(file_or_alias)
+        return self.db.execute("""select fileid,template from file_association where associated_to = ?""", (f,)).fetchall()
+
+    def associate_file(self, file_or_alias, associate_to, template):
+        """Add a file association from 'file_or_alias' to 'associate_to'.
+
+        When the file 'associate_to' is used in an execution, 
+        'file_or_alias' is also used, and named according to 'template'. 
+        'template' should be a string containing %s, which will be
+        replaced with the name 'associate_to' is copied to.  So if
+        'associate_to' is copied to X in the working directory, and
+        the template is "%s.idx", then 'file_or_alias' is also copied 
+        to X.idx.
+        """
+        src = self.resolve_alias(file_or_alias)
+        dst = self.resolve_alias(associate_to)
+        if template.find("%s") == -1:
+            raise ValueError("Template of a file association must contain exactly one %s.")
+        else:
+            self.db.execute("""insert into file_association(fileid,associated_to,template) values (?,?,?)""", (src, dst, template))
+            self.db.commit()
+            
+    def delete_file_association(self, file_or_alias, associated_to):
+        """Remove the file association from 'file_or_alias' to 'associated_to'.
+
+        Both fields can be either an integer or an alias string.
+        """
+        src = self.resolve_alias(file_or_alias)
+        dst = self.resolve_alias(associated_to)
+        self.db.execute("""delete from file_association where fileid=? and associated_to=?""", (src,dst))
+        self.db.commit()
 
 def get_ex():
     m = MiniLIMS("test")
