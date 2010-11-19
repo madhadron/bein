@@ -311,7 +311,13 @@ class Execution(object):
         Note that the file is not actually added to the repository
         until the execution finishes.
         """
-        self.files.append((filename,description))
+        if filename == None:
+            if description = "":
+                raise("Tried to add None to repository.")
+            else:
+                raise("Tried to add None with descrition '" + description +"' to repository.")
+        else:
+            self.files.append((filename,description))
     def finish(self):
         """Set the time when the execution finished."""
         self.finished_at = int(time.time())
