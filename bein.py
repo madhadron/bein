@@ -826,13 +826,21 @@ class MiniLIMS(object):
         a filename, in which case the file will be copied to that
         filename.
         """
+        shutil.copy(self.path_to_file(file_or_alias), dst)
+
+    def path_to_file(self, file_or_alias):
+        """Return the full path to a file in the repository.
+
+        It is often useful to be able to read a file in the repository
+        without actually copying it.  If you are not planning to write
+        to it, this presents no problem.
+        """
         fileid = self.resolve_alias(file_or_alias)
         filename = [x for (x,) in 
                     self.db.execute("""select repository_name
                                        from file where id = ?""",
                                     (fileid, ))][0]
-        shutil.copy(os.path.join(self.file_path,filename),
-                    dst)
+        return(os.path.join(self.file_path,filename))
 
     def resolve_alias(self, alias):
         """Resolve an alias to an integer file id.
