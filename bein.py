@@ -249,6 +249,8 @@ class program(object):
             return_code = sp.wait()
             stdout = None
             stderr = None
+            while not(os.path.exists(os.path.join(ex.exwd, stdout_filename))):
+                pass # We need to wait until the files actually show up
             with open(os.path.join(ex.exwd,stdout_filename), 'r') as fo:
                 stdout = fo.readlines()
             with open(os.path.join(ex.exwd,stderr_filename), 'r') as fe:
