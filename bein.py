@@ -409,6 +409,7 @@ class MiniLIMS(object):
        * delete_execution
        * import_file
        * export_file
+       * path_to_file
        * resolve_alias
        * add_alias
        * resolve_alias
