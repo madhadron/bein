@@ -150,6 +150,8 @@ class program(object):
         the program are recorded to that execution, and thus to the
         MiniLIMS object.
         """
+        if not(isinstance(ex,Execution)):
+            raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args)
         sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE,
@@ -190,6 +192,8 @@ class program(object):
             a = touch.nonblocking("boris")
             f = a.wait()
         """
+        if not(isinstance(ex,Execution)):
+            raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args)
         class Future(object):
             def __init__(self):
@@ -229,6 +233,8 @@ class program(object):
         system (using the bsub command) instead of as a local
         subprocess.
         """
+        if not(isinstance(ex,Execution)):
+            raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args)
         stdout_filename = unique_filename_in(ex.exwd)
         stderr_filename = unique_filename_in(ex.exwd)
