@@ -154,7 +154,7 @@ class program(object):
         MiniLIMS object.
         """
         if not(isinstance(ex,Execution)):
-            raise ValueError("First argument to a program must be an Execution.")
+            raise ValueError("First argument to program " + self.gen_args.__name__ + " must be an Execution.")
         d = self.gen_args(*args)
         sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE,
