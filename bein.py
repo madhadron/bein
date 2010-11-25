@@ -60,6 +60,9 @@ class ProgramOutput(object):
 class ProgramFailed(Exception):
     def __init__(self, output):
         self.output = output
+    def __str__(self):
+        return("Running '" + " ".join(self.output.arguments) + \
+                   "' failed with stderr:\n\t" + "\t".join(self.output.stderr))
 
 
 def unique_filename_in(path):
@@ -409,6 +412,7 @@ class MiniLIMS(object):
        * delete_execution
        * import_file
        * export_file
+       * path_to_file
        * resolve_alias
        * add_alias
        * resolve_alias
@@ -501,7 +505,7 @@ class MiniLIMS(object):
         """)
         self.db.execute("""
         CREATE VIEW execution_immutability AS
-        SELECT eo.execution as id, ifnull(max(fi.immutable),0) from
+        SELECT eo.execution as id, ifnull(max(fi.immutable),0) as immutable from
         execution_outputs as eo left join file_immutability as fi
         on eo.file = fi.immutable
         group by id
@@ -826,13 +830,21 @@ class MiniLIMS(object):
         a filename, in which case the file will be copied to that
         filename.
         """
+        shutil.copy(self.path_to_file(file_or_alias), dst)
+
+    def path_to_file(self, file_or_alias):
+        """Return the full path to a file in the repository.
+
+        It is often useful to be able to read a file in the repository
+        without actually copying it.  If you are not planning to write
+        to it, this presents no problem.
+        """
         fileid = self.resolve_alias(file_or_alias)
         filename = [x for (x,) in 
                     self.db.execute("""select repository_name
                                        from file where id = ?""",
                                     (fileid, ))][0]
-        shutil.copy(os.path.join(self.file_path,filename),
-                    dst)
+        return(os.path.join(self.file_path,filename))
 
     def resolve_alias(self, alias):
         """Resolve an alias to an integer file id.
