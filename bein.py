@@ -60,6 +60,9 @@ class ProgramOutput(object):
 class ProgramFailed(Exception):
     def __init__(self, output):
         self.output = output
+    def __str__(self):
+        return("Running '" + " ".join(self.output.arguments) + \
+                   "' failed with stderr:\n\t" + "\t".join(self.output.stderr))
 
 
 def unique_filename_in(path):
