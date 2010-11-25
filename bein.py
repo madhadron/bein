@@ -421,6 +421,7 @@ class MiniLIMS(object):
        * path_to_file
        * resolve_alias
        * add_alias
+       * delete_alias
        * resolve_alias
        * associate_file
        * delete_file_association
