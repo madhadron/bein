@@ -69,20 +69,19 @@ def execution_to_html(lims, exid):
                                  lims.db.execute("""select file from execution_use 
                                                     where execution=?""", 
                                                  (exid,)).fetchall()])
-    if used_files_text == "":
-        used_files_text = "<em>(no used files)</em>"
+    if used_files_text != "":
+        used_files_text = """<p><span class="label">Used files</span> %s</p>""" % (used_files_text,)
     added_files_text = ", ".join([str(f) for (f,) in
                                   lims.db.execute("""select id from file where origin='execution' and origin_value=?""", (exid,)).fetchall()])
-    if added_files_text == "":
-        added_files_text = "<em>(no files added)</em>"
+    if added_files_text != "":
+ 	added_files_text = """<p><span class="label">Added files</span> %s</p>""" % (added_files_text,)
     return("""<div class="execution">
               <a name="execution%d"></a>
               <h2>%d - %s</h2>
  	<p><span class="label">Ran</span> from %s to %s</p>
  	<p><span class="label">Working directory</span> 
            <span class="working_directory">%s</span></p>
- 	<p><span class="label">Used files</span> %s</p>
- 	<p><span class="label">Added files</span> %s</p>
+ 	%s %s
         %s
         </div>
     """ % (exid, exid, description, started_at_text, finished_at_text, working_directory, used_files_text, added_files_text, programs_to_html(lims,exid)))
@@ -100,27 +99,22 @@ def program_to_html(lims, exid, pos):
         raise ValueError("Could not get values for program " + str(pos) + " in execution " + str(exid))
     else:
         [pid,return_code,stdout,stderr] = fields
-        if stdout == "":
-            stdout = "<em>(stdout was empty)</em>"
-        else:
-            stdout = "<p><b><tt>stdout</tt></b></p><pre>" + stdout + "</pre>"
-        if stderr == "":
-            stderr = "<em>(stderr was empty)</em>"
-        else:
-            stderr = "<p><b><tt>stderr</tt></b></p><pre>" + stderr + "</pre>"
+        if stdout != "":
+            stdout = """<p><span class="program_label">stdout</span><br/><pre>%s</pre></p>""" % (stdout,)
+        if stderr != "":
+            stderr = """<p><span class="program_label">stderr</span><br/><pre>%s</pre></p>""" % (stderr)
     arguments = " ".join([x for (x,) in 
                           lims.db.execute("""select argument from argument 
                                             where program=? and execution=? 
                                             order by pos""", (pos,exid))])
+    argument_color = (return_code == 0) and "black" or "red"
     return """<div class="program">
-              <h3><tt>%s</tt></h3>
+              <h3 style="color: %s;"><tt>%s</tt></h3>
               <p>Pid %d exited with value %d</p>
-              <div class="output"><div class="row">
-                  <div class="stdout">%s</div>
-                  <div class="stderr">%s</div>
-              </div></div>
-              </div>
-           """ % (arguments, pid, return_code, stdout, stderr)
+              %s
+              %s
+              </div>""" % (argument_color, arguments, pid, return_code, stdout, stderr)
+
 
 class BeinClient(object):
     def __init__(self, minilims):

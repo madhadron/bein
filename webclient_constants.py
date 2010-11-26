@@ -18,6 +18,15 @@ span.label {
     margin-right: 10pt;
 }
 
+span.program_label {
+    font-family: monospace;
+    float: left;
+    font-weight: bold;
+    width: 5em;
+    text-align: right;
+    margin-right: 5pt;
+}
+
 h2 {
     background-color: #000096;
     color: #ffffff;
