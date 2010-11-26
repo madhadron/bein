@@ -356,7 +356,7 @@ class Execution(object):
 
 
 @contextmanager
-def execution(lims = None):
+def execution(lims = None, description=""):
     """Create an Execution connected to the given MiniLIMS object.
     
     execution is a contextmanager, so it can be used in a with
@@ -381,7 +381,7 @@ def execution(lims = None):
     finally:
         ex.finish()
         if lims != None:
-            lims.write(ex)
+            lims.write(ex, description)
         shutil.rmtree(ex.exwd, ignore_errors=True)
         os.chdir("..")
 
@@ -421,6 +421,7 @@ class MiniLIMS(object):
        * path_to_file
        * resolve_alias
        * add_alias
+       * delete_alias
        * resolve_alias
        * associate_file
        * delete_file_association
