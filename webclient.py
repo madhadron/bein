@@ -113,7 +113,7 @@ def program_to_html(lims, exid, pos):
                                             where program=? and execution=? 
                                             order by pos""", (pos,exid))])
     return """<div class="program">
-              <h3>%s</h3>
+              <h3><tt>%s</tt></h3>
               <p>Pid %d exited with value %d</p>
               <div class="output"><div class="row">
                   <div class="stdout">%s</div>
