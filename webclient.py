@@ -71,7 +71,10 @@ def execution_to_html(lims, exid):
                                                  (exid,)).fetchall()])
     if used_files_text == "":
         used_files_text = "<em>(no used files)</em>"
-
+    added_files_text = ", ".join([str(f) for (f,) in
+                                  lims.db.execute("""select id from file where origin='execution' and origin_value=?""", (exid,)).fetchall()])
+    if added_files_text == "":
+        added_files_text = "<em>(no files added)</em>"
     return("""<div class="execution">
               <a name="execution%d"></a>
               <h2>%d - %s</h2>
@@ -79,10 +82,33 @@ def execution_to_html(lims, exid):
  	<p><span class="label">Working directory</span> 
            <span class="working_directory">%s</span></p>
  	<p><span class="label">Used files</span> %s</p>
- 	<p><span class="label">Added files</span> (none)</p>
+ 	<p><span class="label">Added files</span> %s</p>
+        %s
+        </div>
+    """ % (exid, exid, description, started_at_text, finished_at_text, working_directory, used_files_text, added_files_text, programs_to_html(lims,exid)))
 
-    """ % (exid, exid, description, started_at_text, finished_at_text, working_directory, used_files_text))
-	
+def programs_to_html(lims, exid):
+    progids = [x for (x,) in lims.db.execute("""select pos from program where execution=?""", (exid,))]
+    return "".join([program_to_html(lims,exid,pos) for pos in progids])
+
+def program_to_html(lims, exid, pos):
+    fields = lims.db.execute("""select pid,return_code,stdout,stderr from program where pos=? and execution=?""", (pos,exid)).fetchone()
+    if fields == None:
+        raise ValueError("Could not get values for program " + str(pos) + " in execution " + str(exid))
+    else:
+        [pid,return_code,stdout,stderr] = fields
+    print "exid %d, program %d" % (exid,pos)
+    arguments = lims.db.execute("""select argument from argument 
+                                   where program=? and execution=? 
+                                   order by pos""", 
+                                (pos,exid)).fetchall()
+    print arguments
+    return """<div class="program">
+              <h3>Test %s</h3>
+              <p>Pid %d exited with value %d</p>
+              </div>
+""" % (arguments, pid, return_code)
+
 # 	<div class="program">
 # 	  <h3>touch af432GADfwwkjGweff23</h3>
 # 	  <p>Pid 14332 exited with code 0</p>
