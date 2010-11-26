@@ -428,7 +428,7 @@ class MiniLIMS(object):
        * associated_files_of
     """
     def __init__(self, path):
-        self.db = sqlite3.connect(path)
+        self.db = sqlite3.connect(path, check_same_thread=False)
         self.file_path = os.path.abspath(path +".files")
         if not(os.path.exists(self.file_path)):
             self.initialize_database(self.db)
@@ -648,10 +648,9 @@ class MiniLIMS(object):
             self.db.execute("""insert into program(pos,execution,pid,return_code,stdout,stderr) values (?,?,?,?,?,?)""",
                             (i, exid, p.pid, p.return_code,
                              "".join(p.stdout), "".join(p.stderr)))
-            [prid] = [x for (x,) in self.db.execute("select last_insert_rowid()")]
             for j,a in enumerate(p.arguments):
                 self.db.execute("""insert into argument(pos,program,execution,argument) values (?,?,?,?)""",
-                                (j,prid,exid,a))
+                                (j,i,exid,a))
         for (filename,description) in ex.files:
             self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value) values (?,importfile(?),?,?,?)""",
                             (filename,os.path.abspath(os.path.join(ex.exwd,filename)),
