@@ -338,7 +338,7 @@ html_header = """
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>MiniLIMS Client: /home/ross/data</title>
-    <link rel="STYLESHEET" href="http://localhost:8080/minilimscss" type="text/css">
+    <link rel="STYLESHEET" href="minilimscss" type="text/css">
     <script src="jquery" type="text/javascript"></script>
     <script src="jscript" type="text/javascript"></script>
   </head>

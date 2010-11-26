@@ -144,75 +144,6 @@ class BeinClient(object):
             "".join([execution_to_html(self.minilims, ex)
                      for (ex,) in self.minilims.db.execute("select id from execution").fetchall()]) + \
             """</div>"""
-    
-# 	<h2>1 - Testing bein system</h2>
-# 	<p><span class="label">Ran</span> from 2010-11-15 13:12:12 to 2010-11-15 13:12:52</p>
-# 	<p><span class="label">Working directory</span> /home/ross/data/projects/bein/5rwafGAsdffRFEW32Fsd</p>
-# 	<p><span class="label">Used files</span> (none)</p>
-# 	<p><span class="label">Added files</span> (none)</p>
-	
-# 	<div class="program">
-# 	  <h3>touch af432GADfwwkjGweff23</h3>
-# 	  <p>Pid 14332 exited with code 0</p>
-	  
-# 	  <div class="output">
-# 	    <div class="row">
-# 	      <div class="stdout">
-# 		<p><b><tt>stdout</tt></b></p>
-# 		<pre>This is some output from stdout</pre>
-# 	      </div>
-# 	      <div class="stderr">
-# 		<p><b><tt>stderr</tt></b></p>
-# 		<pre>And there were error messages!
-# 		  Lawks!</pre>
-# 	      </div>
-# 	    </div>
-# 	  </div>
-# 	</div>
-	
-# 	<h2>2 - Simulate RNASeq data sets</h2>
-# 	<p><span class="label">Ran</span> from 2010-11-16 13:13:01 to 2010-11-16 13:52:12</p>
-# 	<p><span class="label">Working directory</span> /home/ross/data/projects/rnaseq/Gfjwer532jASDioiwfVA</p>
-# 	<p><span class="label">Used files</span> (none)</p>
-# 	<p><span class="label">Added files</span> <a href="#file1">1 - FASTA file of selected sequences for RNASeq simulation</a></p>
-	
-# 	<div class="program">
-# 	  <h3>python code/simulate.py -n 61300 -p aK234kwwVa23j23f2FW9 aK234kwwVa23j23f2FW9 shhDFmDDMDVsnRcIZ4AH</h3>
-# 	  <p>Pid 1111 exited with code 0</p>
-# 	  <div class="output">
-# 	    <div class="row">
-# 	      <div class="stdout">
-# 		<p><b><tt>stdout</tt></b></p>
-# 		<pre>Importing transcripts...done
-# 		  Simulating...done</pre>
-# 	      </div>
-# 	      <div class="stderr">
-# 		<p><b><tt>stderr</tt></b></p>
-# 		<pre>Meep</pre>
-#               </div>
-#             </div>
-# 	  </div>
-# 	</div>
-
-# 	<div class="program">
-# 	  <h3>python code/simulate.py -n 61300 -p aK234kwwVa23j23f2FW9 aK234kwwVa23j23f2FW9 ELOZw8BZ1gAThoX6KoqZ</h3>
-# 	  <p>Pid 1112 exited with code 0</p>
-# 	  <div class="output">
-# 	    <div class="row">
-# 	      <div class="stdout">
-# 		<p><b><tt>stdout</tt></b></p>
-# 		<pre>Importing transcripts...done
-# 		  Simulating...done</pre>
-# 	      </div>
-# 	      <div class="stderr">
-# 		<p><b><tt>stderr</tt></b></p>
-# 		<pre></pre>
-#               </div>
-#             </div>
-# 	  </div>
-# 	</div>
-#       </div>
-# """
 
     def files_tab(self):
         return """<div id="tabs-2" class="tab_content">""" + \
@@ -225,12 +156,12 @@ class Usage(Exception):
         self.msg = msg
 
 def main(argv = None):
-    verbose = False
+    port = 8080
     if argv is None:
         argv = sys.argv[1:]
     try:
         try:
-            opts, args = getopt.getopt(argv, "hv", ["help","verbose"])
+            opts, args = getopt.getopt(argv, "p:h", ["help"])
         except getopt.error, msg:
             raise Usage(msg)
         for o, a in opts:
@@ -238,14 +169,15 @@ def main(argv = None):
                 print __doc__
                 print usage
                 sys.exit(0)
-            if o in ("-v", "--verbose"):
-                verbose = True
+            if o in ("-p",):
+                port = int(a)
         if len(args) != 1:
             raise Usage("No MiniLIMS repository specified.")
         minilims = args[0]
         if not(os.path.exists(minilims)) or \
                 not(os.path.isdir(minilims + '.files')):
             raise Usage("No MiniLIMS repository found at " + minilims)
+        cherrypy.config.update({'server.socket_port':port})
         cherrypy.quickstart(BeinClient(minilims))
         sys.exit(0)
     except Usage, err:
