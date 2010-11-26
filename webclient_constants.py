@@ -51,6 +51,8 @@ h3 {
 div.output {
     display: table;
     margin-top: 3pt;
+    table-layout: fixed;
+    width: 100%;
 }
 
 div.row {
@@ -61,7 +63,7 @@ div.row {
 div.stdout {
     margin: 5pt;
     display: table-cell;
-    width: 40%;
+    width: 50%;
     font-family: monospace;
     border-style: none solid none none;
     border-width: 1px;
@@ -72,7 +74,7 @@ div.stdout {
 div.stderr {
     display: table-cell;
     padding-left: 10pt;
-    width: 40%;
+    width: 50%;
     font-family: monospace;
 }
 
