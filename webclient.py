@@ -89,7 +89,10 @@ def execution_to_html(lims, exid):
 
 def programs_to_html(lims, exid):
     progids = [x for (x,) in lims.db.execute("""select pos from program where execution=?""", (exid,))]
-    return "".join([program_to_html(lims,exid,pos) for pos in progids])
+    if progids == []:
+        return """<div class="program"><h3><em>(no programs)</em></h3></div>"""
+    else:
+        return "".join([program_to_html(lims,exid,pos) for pos in progids])
 
 def program_to_html(lims, exid, pos):
     fields = lims.db.execute("""select pid,return_code,stdout,stderr from program where pos=? and execution=?""", (pos,exid)).fetchone()
@@ -97,38 +100,27 @@ def program_to_html(lims, exid, pos):
         raise ValueError("Could not get values for program " + str(pos) + " in execution " + str(exid))
     else:
         [pid,return_code,stdout,stderr] = fields
-    print "exid %d, program %d" % (exid,pos)
-    arguments = lims.db.execute("""select argument from argument 
-                                   where program=? and execution=? 
-                                   order by pos""", 
-                                (pos,exid)).fetchall()
-    print arguments
+        if stdout == "":
+            stdout = "<em>(stdout was empty)</em>"
+        else:
+            stdout = "<p><b><tt>stdout</tt></b></p><pre>" + stdout + "</pre>"
+        if stderr == "":
+            stderr = "<em>(stderr was empty)</em>"
+        else:
+            stderr = "<p><b><tt>stderr</tt></b></p><pre>" + stderr + "</pre>"
+    arguments = " ".join([x for (x,) in 
+                          lims.db.execute("""select argument from argument 
+                                            where program=? and execution=? 
+                                            order by pos""", (pos,exid))])
     return """<div class="program">
-              <h3>Test %s</h3>
+              <h3>%s</h3>
               <p>Pid %d exited with value %d</p>
+              <div class="output"><div class="row">
+                  <div class="stdout">%s</div>
+                  <div class="stderr">%s</div>
+              </div></div>
               </div>
-""" % (arguments, pid, return_code)
-
-# 	<div class="program">
-# 	  <h3>touch af432GADfwwkjGweff23</h3>
-# 	  <p>Pid 14332 exited with code 0</p>
-	  
-# 	  <div class="output">
-# 	    <div class="row">
-# 	      <div class="stdout">
-# 		<p><b><tt>stdout</tt></b></p>
-# 		<pre>This is some output from stdout</pre>
-# 	      </div>
-# 	      <div class="stderr">
-# 		<p><b><tt>stderr</tt></b></p>
-# 		<pre>And there were error messages!
-# 		  Lawks!</pre>
-# 	      </div>
-# 	    </div>
-# 	  </div>
-# 	</div>
-	
-
+           """ % (arguments, pid, return_code, stdout, stderr)
 
 class BeinClient(object):
     def __init__(self, minilims):
