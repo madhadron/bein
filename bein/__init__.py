@@ -313,7 +313,8 @@ class Execution(object):
         written into the MiniLIMS repository.
         """
         self.programs.append(program)
-    def add(self, filename, description=""):
+    def add(self, filename, description="", associate_to_id=None, 
+            associate_to_filename=None, template=None, alias=None):
         """Add a file to the MiniLIMS object from this execution.
 
         filename is the name of the file in the execution's working
@@ -331,7 +332,8 @@ class Execution(object):
             else:
                 raise("Tried to add None with descrition '" + description +"' to repository.")
         else:
-            self.files.append((filename,description))
+            self.files.append((filename,description,associate_to_id,
+                               associate_to_filename,template,alias))
     def finish(self):
         """Set the time when the execution finished."""
         self.finished_at = int(time.time())
@@ -659,10 +661,23 @@ class MiniLIMS(object):
             for j,a in enumerate(p.arguments):
                 self.db.execute("""insert into argument(pos,program,execution,argument) values (?,?,?,?)""",
                                 (j,i,exid,a))
-        for (filename,description) in ex.files:
+        fileids = {}
+        for (filename,description,associate_to_id,associate_to_filename,template,alias) in ex.files:
             self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value) values (?,importfile(?),?,?,?)""",
                             (filename,os.path.abspath(os.path.join(ex.exwd,filename)),
                              description,'execution',exid))
+            fileids[filename] = self.db.execute("""select last_insert_rowid()""").fetchone()[0]
+            if alias != None:
+                self.add_alias(fileids[filename], alias)
+            if template != None and \
+                    (associate_to_id != None or \
+                         associate_to_filename != None):
+                if associate_to_id != None:
+                    target = associate_to_id
+                elif associate_to_filename != None:
+                    target = fileids[associate_to_filename]
+                self.associate_file(fileids[filename],target,
+                                    template)
         for used_file in set(ex.used_files):
             [x for x in self.db.execute("""insert into execution_use(execution,file) values (?,?)""", (exid,used_file))]
         self.db.commit()
@@ -932,52 +947,33 @@ class MiniLIMS(object):
         self.db.execute("""delete from file_association where fileid=? and associated_to=?""", (src,dst))
         self.db.commit()
 
-def get_ex():
-    m = MiniLIMS("test")
-    with execution(m) as ex:
-        # # #    f = bowtie(ex, '../test_data/selected_transcripts', '../test_data/reads-1-1')
-        f = touch(ex)
-        g = sleep.nonblocking(ex,1)
-        ex.add(f)
-        ex.use(1)
-        print g.wait()
-    
-def get_ex1():
-    m = MiniLIMS("test")
-    with execution(m) as ex:
-        f = touch(ex, 'asdf/asdf')
-
-#with execution(m) as ex:
-#     print ex.use(1)
-#     print ex.exwd
-        
 
 # Program library
 
-# @program
-# def bowtie(index, reads):
-#     sam_filename = unique_filename_in(os.getcwd())
-#     return {"arguments": ["bowtie", "-Sra", index, reads,sam_filename],
-#             "return_value": sam_filename}
+@program
+def bowtie(index, reads):
+    sam_filename = unique_filename_in(os.getcwd())
+    return {"arguments": ["bowtie", "-Sra", index, reads,sam_filename],
+            "return_value": sam_filename}
 
 
-# @program
-# def sam_to_bam(sam_filename):
-#     bam_filename = unique_filename_in(os.getcwd())
-#     return {"arguments": ["samtools","view","-b","-S","-o",bam_filename,sam_filename],
-#             "return_value": bam_filename}
+@program
+def sam_to_bam(sam_filename):
+    bam_filename = unique_filename_in(os.getcwd())
+    return {"arguments": ["samtools","view","-b","-S","-o",bam_filename,sam_filename],
+            "return_value": bam_filename}
 
 
-# @program
-# def touch(filename = None):
-#     if filename == None:
-#         filename = unique_filename_in(os.getcwd())
-#     return {"arguments": ["touch",filename],
-#             "return_value": filename}
+@program
+def touch(filename = None):
+    if filename == None:
+        filename = unique_filename_in(os.getcwd())
+    return {"arguments": ["touch",filename],
+            "return_value": filename}
 
 
-# @program
-# def sleep(n):
-#     return {"arguments": ["sleep", str(n)],
-#             "return_value": lambda q: n}
+@program
+def sleep(n):
+    return {"arguments": ["sleep", str(n)],
+            "return_value": lambda q: n}
 
