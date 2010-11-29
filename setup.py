@@ -5,4 +5,5 @@ setup(name='bein',
       author='Fred Ross',
       author_email='madhadron@gmail.com',
       packages=['bein'],
+      scripts=['beinclient'],
       )

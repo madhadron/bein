@@ -1,0 +1,5 @@
+#!python
+import bein.webclient
+import sys
+
+bein.webclient.main(sys.argv[1:])

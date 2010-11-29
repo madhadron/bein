@@ -1,4 +1,9 @@
-"""doc string"""
+"""
+beinclient 0.1
+Fred Ross, <fred dot ross at epfl dot ch>
+
+Beinclient is a simple web interface for MiniLIMS repositories.
+"""
 from bein import *
 from datetime import *
 import cherrypy
@@ -9,7 +14,12 @@ import os
 
 from webclient_constants import *
 
-usage = """Write usage info"""
+usage = """beinclient [-p port] [-h] repository
+
+-p port    Listen for HTTP connections on 'port' (default: 8080)
+-h         Print this message
+repository MiniLIMS repository to serve
+"""
 
 def file_to_html(lims, id_or_alias):
     fileid = lims.resolve_alias(id_or_alias)
@@ -207,6 +217,7 @@ def main(argv = None):
         if len(args) != 1:
             raise Usage("No MiniLIMS repository specified.")
         minilims = args[0]
+        print "MiniLIMS repository: ", minilims
         if not(os.path.exists(minilims)) or \
                 not(os.path.isdir(minilims + '.files')):
             raise Usage("No MiniLIMS repository found at " + minilims)
