@@ -65,7 +65,6 @@ class ProgramFailed(Exception):
         return("Running '" + " ".join(self.output.arguments) + \
                    "' failed with stderr:\n\t" + "\t".join(self.output.stderr))
 
-
 def unique_filename_in(path=None):
     if path == None:
         path = os.getcwd()
@@ -420,11 +419,13 @@ class MiniLIMS(object):
 
        * search_files
        * search_executions
+       * fetch_execution
        * copy_file
        * delete_file
        * delete_execution
        * import_file
        * export_file
+       * fetch_file
        * path_to_file
        * resolve_alias
        * add_alias
@@ -777,6 +778,84 @@ class MiniLIMS(object):
         else:
             matching_programs = []
         return list(set(matching_executions+matching_programs))
+
+    def fetch_file(self, id_or_alias):
+        """Returns a dictionary describing the given file."""
+        fileid = self.resolve_alias(id_or_alias)
+        fields = self.db.execute("""select external_name, repository_name,
+                                    created, description, origin, origin_value
+                                    from file where id=?""", 
+                                 (fileid,)).fetchone()
+        if fields == None:
+            raise ValueError("No such file " + str(id_or_alias) + " in MiniLIMS.")
+        else:
+            [external_name, repository_name, created, description,
+             origin_type, origin_value] = fields
+        if origin_type == 'copy':
+            origin = ('copy',origin_value)
+        elif origin_type == 'execution':
+            origin = ('execution',origin_value)
+        elif origin_type == 'import':
+            origin = 'import'
+        aliases = [a for (a,) in 
+                   self.db.execute("select alias from file_alias where file=?",
+                                   (fileid,))]
+        associations = self.db.execute("""select fileid,template from file_association where
+                                          associated_to=?""", (fileid,)).fetchall()
+        associated_to = self.db.execute("""select associated_to,template from file_association
+                                           where fileid=?""", (fileid,)).fetchall()
+        return {'external_name': external_name,
+                'repository_name': repository_name,
+                'description': description,
+                'origin': origin,
+                'aliases': aliases,
+                'associations': associations,
+                'associated_to': associated_to}
+ 
+    
+    def fetch_execution(self, exid):
+        """Returns a dictionary of all the data corresponding to the given execution id."""
+        def fetch_program(exid, progid):
+            fields = self.db.execute("""select pid,return_code,stdout,stderr
+                                        from program where execution=? and pos=?""",
+                                     (exid, progid)).fetchone()
+            if fields == None:
+                raise ValueError("No such program: execution %d, program %d" % (exid, progid))
+            else:
+                [pid, return_code, stdout, stderr] = fields
+            arguments = [a for (a,) in self.db.execute("""select argument from argument
+                                                          where execution=? and program=?
+                                                          order by pos asc""", (exid,progid))]
+            return {'pid': pid,
+                    'return_code': return_code,
+                    'stdout': stdout,
+                    'stderr': stderr,
+                    'arguments': arguments}
+        exfields = self.db.execute("""select started_at, finished_at, working_directory,
+                                           description, exception from execution
+                                    where id=?""", (exid,)).fetchone()
+        if exfields == None:
+            raise ValueError("No such execution with id %d" % (exid,))
+        else:
+            print exfields
+            (started_at,finished_at,working_directory,
+             description, exception) = exfields
+        progids = [a for (a,) in self.db.execute("""select pos from program where execution=?
+                                                  order by pos asc""", (exid,))]
+        progs = [fetch_program(exid,i) for i in progids]
+        added_files = [a for (a,) in self.db.execute("""select id from file where
+                                                        origin='execution' and origin_value=?""",
+                                                     (exid,))]
+        used_files = [a for (a,) in self.db.execute("""select file from execution_use
+                                                       where execution=?""", (exid,))]
+        return {'started_at': started_at,
+                'finished_at': finished_at,
+                'working_directory': working_directory,
+                'description': description,
+                'exception_string': exception,
+                'programs': progs,
+                'added_files': added_files,
+                'used_files': used_files}
 
     def copy_file(self, file_or_alias):
         """Copy the given file in the MiniLIMS repository.
