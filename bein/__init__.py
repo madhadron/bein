@@ -66,7 +66,9 @@ class ProgramFailed(Exception):
                    "' failed with stderr:\n\t" + "\t".join(self.output.stderr))
 
 
-def unique_filename_in(path):
+def unique_filename_in(path=None):
+    if path == None:
+        path = os.getcwd()
     def random_string():
         return "".join([random.choice(string.letters + string.digits) 
                         for x in range(20)])
@@ -952,30 +954,30 @@ def get_ex1():
 
 # Program library
 
-@program
-def bowtie(index, reads):
-    sam_filename = unique_filename_in(os.getcwd())
-    return {"arguments": ["bowtie", "-Sra", index, reads,sam_filename],
-            "return_value": sam_filename}
+# @program
+# def bowtie(index, reads):
+#     sam_filename = unique_filename_in(os.getcwd())
+#     return {"arguments": ["bowtie", "-Sra", index, reads,sam_filename],
+#             "return_value": sam_filename}
 
 
-@program
-def sam_to_bam(sam_filename):
-    bam_filename = unique_filename_in(os.getcwd())
-    return {"arguments": ["samtools","view","-b","-S","-o",bam_filename,sam_filename],
-            "return_value": bam_filename}
+# @program
+# def sam_to_bam(sam_filename):
+#     bam_filename = unique_filename_in(os.getcwd())
+#     return {"arguments": ["samtools","view","-b","-S","-o",bam_filename,sam_filename],
+#             "return_value": bam_filename}
 
 
-@program
-def touch(filename = None):
-    if filename == None:
-        filename = unique_filename_in(os.getcwd())
-    return {"arguments": ["touch",filename],
-            "return_value": filename}
+# @program
+# def touch(filename = None):
+#     if filename == None:
+#         filename = unique_filename_in(os.getcwd())
+#     return {"arguments": ["touch",filename],
+#             "return_value": filename}
 
 
-@program
-def sleep(n):
-    return {"arguments": ["sleep", str(n)],
-            "return_value": lambda q: n}
+# @program
+# def sleep(n):
+#     return {"arguments": ["sleep", str(n)],
+#             "return_value": lambda q: n}
 
