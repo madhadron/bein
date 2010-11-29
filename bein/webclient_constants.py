@@ -13,9 +13,18 @@ span.label {
 //    position: absolute;
     float: left;
     font-weight: bold;
-    width: 10em;
+    width: 15em;
     text-align: right;
     margin-right: 10pt;
+}
+
+.delete_link {
+    float: right;
+}
+
+.download_link {
+    color: white;
+    font-size: 80%;
 }
 
 h2 {
@@ -150,8 +159,30 @@ $(document).ready(function(){
 	$(activeTab).fadeIn(); //Fade in the active ID content
 	return false;
     });
+
 });
+
+var file_tab = function() {
+    $('.tab_content').hide();
+    $('#tabs-2').fadeIn();
+}
+
+var execution_tab = function() {
+    $('.tab_content').hide();
+    $('#tabs-1').fadeIn();
+}
+
+var delete_entry = function(t,i) {
+    var a = confirm('Really delete ' + t + ' ' + i + '?');
+    if (a) { 
+      $.get('delete', {obj_type: t, obj_id: i}, 
+            function(data) { $('#' + t + '-' + i).remove(); });
+    } else {
+      return false;
+    }
+}
 """
+
 jquery = r"""
 /*!
  * jQuery JavaScript Library v1.4.4
@@ -334,7 +365,7 @@ html_header = """
     <script src="jscript" type="text/javascript"></script>
   </head>
   <body>
-    
+
     <div id="tabs">
       <ul class="tabs">
 	<li><a href="#tabs-1">Executions</a></li>
@@ -343,7 +374,7 @@ html_header = """
     </div>
     
     <div class="tab_container">
-"""
+""" 
 
 html_footer = """
     </div>

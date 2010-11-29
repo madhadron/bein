@@ -38,6 +38,7 @@ stderr, imported files, etc. from any execution.
 """
 import subprocess
 import random
+import traceback
 import string
 import os
 import sqlite3
@@ -374,14 +375,16 @@ def execution(lims = None, description=""):
     os.mkdir(os.path.join(os.getcwd(), execution_dir))
     ex = Execution(lims,os.path.join(os.getcwd(), execution_dir))
     os.chdir(os.path.join(os.getcwd(), execution_dir))
+    exception_string = None
     try:
         yield ex
     except Exception, e:
+        exception_string = ''.join(traceback.format_exception_only(e.__class__, str(e)))
         raise e
     finally:
         ex.finish()
         if lims != None:
-            lims.write(ex, description)
+            lims.write(ex, description, exception_string)
         shutil.rmtree(ex.exwd, ignore_errors=True)
         os.chdir("..")
 
@@ -446,7 +449,8 @@ class MiniLIMS(object):
              started_at integer not null, 
              finished_at integer default null,
              working_directory text not null, 
-             description text not null default '' 
+             description text not null default '',
+             exception text default null
         )""")
         self.db.execute("""
         CREATE TABLE program (
@@ -626,7 +630,7 @@ class MiniLIMS(object):
         except ValueError, v:
             return None
 
-    def write(self, ex, description = ""):
+    def write(self, ex, description = "", exception_string=None):
         """Write an execution to the MiniLIMS.
 
         The overall Execution object is recorded in the execution
@@ -640,9 +644,11 @@ class MiniLIMS(object):
         """
         self.db.execute("""
                         insert into execution(started_at,finished_at,
-                                              working_directory,description) 
-                        values (?,?,?,?)""",
-                        (ex.started_at, ex.finished_at, ex.exwd, description))
+                                              working_directory,description,
+                                              exception) 
+                        values (?,?,?,?,?)""",
+                        (ex.started_at, ex.finished_at, ex.exwd, description,
+                         exception_string))
         [exid] = [x for (x,) in self.db.execute("select last_insert_rowid()")]
         for i,p in enumerate(ex.programs):
             self.db.execute("""insert into program(pos,execution,pid,return_code,stdout,stderr) values (?,?,?,?,?,?)""",

@@ -2,6 +2,7 @@
 from bein import *
 from datetime import *
 import cherrypy
+from cherrypy.lib.static import serve_file
 import sys
 import getopt
 import os
@@ -32,14 +33,15 @@ def file_to_html(lims, id_or_alias):
         if description == "":
             description = '<em>(no description)</em>'
         if origin == 'execution':
-            origin_text = 'execution %d at %s' % (origin_value, created)
+            origin_text = """<a href="#execution-%d" onclick="execution_tab();">execution %d</a> at %s""" % (origin_value, origin_value, created)
         elif origin == 'import':
             origin_text = 'manually imported at %s' % (created, )
         elif origin == 'copy':
             origin_text = 'copy of %d' % (origin_value, )
-    return("""<div class="file">
-              <a name="file%d"></a>
-              <h2>%d - %s</h2>
+    return("""<div class="file" id="file-%d">
+              <a name="file-%d"></a>
+              <h2>%d - %s <a class="download_link" href="download?fileid=%d">Download</a> 
+              <input class="delete_link" type="button" value="Delete" onclick="delete_entry('file',%d);" /></h2>
               <p><span class="label">Aliases</span>
                  <span class="aliases">%s</span></p>
               <p><span class="label">External name</span>
@@ -49,20 +51,26 @@ def file_to_html(lims, id_or_alias):
               <p><span class="label">Created</span>
                  <span class="created">%s</span></p>
               </div>
-	""" % (fileid, fileid, description, alias_text,
+	""" % (fileid, fileid, fileid, description, fileid, fileid, alias_text,
                external_name, repository_name, origin_text))
 
 def execution_to_html(lims, exid):
     fields = lims.db.execute("""select started_at, finished_at, 
-                                working_directory, description
+                                working_directory, description,
+                                exception
                                 from execution where id=?""",
                              (exid, )).fetchone()
     if fields == None:
         raise ValueError("No such execution " + str(exid) + " in MiniLIMS")
     else:
-        [started_at, finished_at, working_directory, description] = fields
+        [started_at, finished_at, working_directory, description,
+         exstr] = fields
     if description == "":
         description = "<em>(no description)</em>"
+    if exstr == None:
+        exstr = ""
+    else:
+        exstr="""<p><span style="color: red">FAILED</span>: <pre>%s</pre>""" % (exstr,)
     started_at_text = datetime.fromtimestamp(started_at).strftime("%Y-%m-%d %H:%M:%S")
     finished_at_text = datetime.fromtimestamp(finished_at).strftime("%Y-%m-%d %H:%M:%S")
     used_files_text = ", ".join([str(f) for (f,) in
@@ -71,20 +79,21 @@ def execution_to_html(lims, exid):
                                                  (exid,)).fetchall()])
     if used_files_text != "":
         used_files_text = """<p><span class="label">Used files</span> %s</p>""" % (used_files_text,)
-    added_files_text = ", ".join([str(f) for (f,) in
+    added_files_text = ", ".join(["""<a href="#file-%d" onclick="file_tab();">%d</a>""" % (f,f) for (f,) in
                                   lims.db.execute("""select id from file where origin='execution' and origin_value=?""", (exid,)).fetchall()])
     if added_files_text != "":
  	added_files_text = """<p><span class="label">Added files</span> %s</p>""" % (added_files_text,)
-    return("""<div class="execution">
-              <a name="execution%d"></a>
-              <h2>%d - %s</h2>
+    return("""<div class="execution" id="execution-%d">
+              <a name="execution-%d"></a>
+              <h2>%d - %s <input class="delete_link" type="button" value="Delete" onclick="delete_entry('execution',%d);"></h2>
  	<p><span class="label">Ran</span> from %s to %s</p>
  	<p><span class="label">Working directory</span> 
            <span class="working_directory">%s</span></p>
  	%s %s
+        %s 
         %s
         </div>
-    """ % (exid, exid, description, started_at_text, finished_at_text, working_directory, used_files_text, added_files_text, programs_to_html(lims,exid)))
+    """ % (exid, exid, exid, description, exid, started_at_text, finished_at_text, working_directory, used_files_text, added_files_text, programs_to_html(lims,exid), exstr))
 
 def programs_to_html(lims, exid):
     progids = [x for (x,) in lims.db.execute("""select pos from program where execution=?""", (exid,))]
@@ -138,6 +147,30 @@ class BeinClient(object):
     @cherrypy.expose
     def jscript(self):
         return jscript
+
+    @cherrypy.expose
+    def delete(self, obj_type=None, obj_id=None):
+        try:
+            obj_id = int(obj_id)
+        except ValueError, v:
+            return "Bad value!"
+        if obj_type == "execution":
+            self.minilims.delete_execution(obj_id)
+            return ""
+        if obj_type == "file":
+            self.minilims.delete_file(obj_id)
+            return ""
+        else:
+            return "Unknown object type."
+
+    @cherrypy.expose
+    def download(self, fileid=None):
+        (repository_name, external_name) = self.minilims.db.execute("select repository_name,external_name from file where id = ?", (fileid,)).fetchone()
+        return serve_file(os.path.join(self.minilims.file_path, 
+                                       repository_name),
+                          content_type = "application/x-download", 
+                          disposition = "attachment",
+                          name = external_name)
 
     def executions_tab(self):
         return """<div id="tabs-1" class="tab_content">""" + \
