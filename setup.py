@@ -4,5 +4,5 @@ setup(name='bein',
       description='Miniature LIMS and workflow manager for bioinformatics',
       author='Fred Ross',
       author_email='madhadron@gmail.com',
-      py_modules=['bein'],
+      packages=['bein'],
       )
