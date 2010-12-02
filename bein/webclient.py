@@ -49,11 +49,15 @@ def file_to_html(lims, id_or_alias):
             description = '<em>(no description)</em>'
         if origin == 'execution':
             origin_text = """<a href="#execution-%d" onclick="execution_tab();">execution %d</a> at %s""" % (origin_value, origin_value, created)
+            origin_class = "ex%d" % (origin_value,)
         elif origin == 'import':
             origin_text = 'manually imported at %s' % (created, )
+            origin_class = "import"
         elif origin == 'copy':
             origin_text = 'copy of %d' % (origin_value, )
-    return("""<div class="file" id="file-%d">
+            origin_class = "copy%d" % (origin_value,)
+    return("""<div class="created-by-%s">
+              <div class="file" id="file-%d">
               <a name="file-%d"></a>
               <h2>%d - %s <a class="download_link" href="download?fileid=%d">Download</a> %s</h2>
               <p><span class="label">Aliases</span>
@@ -64,8 +68,9 @@ def file_to_html(lims, id_or_alias):
                  <span class="repository_name">%s</span></p>
               <p><span class="label">Created</span>
                  <span class="created">%s</span></p>
-              </div>
-	""" % (fileid, fileid, fileid, description, fileid, delete_text, alias_text,
+              </div></div>
+	""" % (origin_class, fileid, fileid, fileid, description,
+               fileid, delete_text, alias_text,
                external_name, repository_name, origin_text))
 
 def execution_to_html(lims, exid):

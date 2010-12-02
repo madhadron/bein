@@ -332,9 +332,11 @@ class Execution(object):
             raise IOError("No such file or directory: '"+filename+"'")
         else:
             self.files.append((filename,description))
+
     def finish(self):
         """Set the time when the execution finished."""
         self.finished_at = int(time.time())
+
     def use(self, file_or_alias):
         """Fetch a file from the MiniLIMS repository.
 
@@ -815,6 +817,8 @@ class MiniLIMS(object):
                             (execution_id,))
             self.db.execute("delete from execution where id = ?", 
                             (execution_id,))
+            [self.delete_file(i) for i in
+             self.search_files(source=('execution',execution_id))]
             self.db.commit()
         except ValueError, v:
             raise ValueError("No such execution id " + str(execution_id))
