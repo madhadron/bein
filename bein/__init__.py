@@ -327,15 +327,18 @@ class Execution(object):
         """
         if filename == None:
             if description == "":
-                raise("Tried to add None to repository.")
+                raise(IOError("Tried to add None to repository."))
             else:
-                raise("Tried to add None with descrition '" + description +"' to repository.")
+                raise(IOError("Tried to add None with descrition '" + description +"' to repository."))
+        elif not(os.path.exists(filename)):
+            raise IOError("No such file or directory: '"+filename+"'")
         else:
             self.files.append((filename,description,associate_to_id,
                                associate_to_filename,template,alias))
     def finish(self):
         """Set the time when the execution finished."""
         self.finished_at = int(time.time())
+
     def use(self, file_or_alias):
         """Fetch a file from the MiniLIMS repository.
 
@@ -523,7 +526,7 @@ class MiniLIMS(object):
         CREATE VIEW execution_immutability AS
         SELECT eo.execution as id, ifnull(max(fi.immutable),0) as immutable from
         execution_outputs as eo left join file_immutability as fi
-        on eo.file = fi.immutable
+        on eo.file = fi.id
         group by id
         """)
         self.db.execute("""
@@ -909,6 +912,8 @@ class MiniLIMS(object):
                             (execution_id,))
             self.db.execute("delete from execution where id = ?", 
                             (execution_id,))
+            [self.delete_file(i) for i in
+             self.search_files(source=('execution',execution_id))]
             self.db.commit()
         except ValueError, v:
             raise ValueError("No such execution id " + str(execution_id))
