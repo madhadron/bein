@@ -45,6 +45,12 @@ def file_to_html(lims, id_or_alias):
             alias_text = "<em>(no aliases)</em>"
         else:
             alias_text = ", ".join(aliases)
+        associations = lims.db.execute("select associated_to,template from file_association where fileid=?", (fileid,)).fetchall()
+        if associations == []:
+            association_text = "<em>(no associations)</em>"
+        else:
+            association_text = ", ".join(["""'%s' on file <a href="#file-%d">%d</a> """ % (t,f,f) for (f,t) in associations])
+
         if description == "":
             description = '<em>(no description)</em>'
         if origin == 'execution':
@@ -62,6 +68,8 @@ def file_to_html(lims, id_or_alias):
               <h2>%d - %s <a class="download_link" href="download?fileid=%d">Download</a> %s</h2>
               <p><span class="label">Aliases</span>
                  <span class="aliases">%s</span></p>
+              <p><span class="label">Associations</span>
+                 <span class="associations">%s</span></p>
               <p><span class="label">External name</span>
                  <span class="external_name">%s</span></p>
               <p><span class="label">Repository name</span>
@@ -70,7 +78,7 @@ def file_to_html(lims, id_or_alias):
                  <span class="created">%s</span></p>
               </div></div>
 	""" % (origin_class, fileid, fileid, fileid, description,
-               fileid, delete_text, alias_text,
+               fileid, delete_text, alias_text, association_text, 
                external_name, repository_name, origin_text))
 
 def execution_to_html(lims, exid):
