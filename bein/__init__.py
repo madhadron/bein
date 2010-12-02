@@ -520,7 +520,7 @@ class MiniLIMS(object):
         CREATE VIEW execution_immutability AS
         SELECT eo.execution as id, ifnull(max(fi.immutable),0) as immutable from
         execution_outputs as eo left join file_immutability as fi
-        on eo.file = fi.immutable
+        on eo.file = fi.id
         group by id
         """)
         self.db.execute("""

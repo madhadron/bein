@@ -33,6 +33,11 @@ def file_to_html(lims, id_or_alias):
     else:
         [external_name, repository_name, created, description,
          origin, origin_value] = fields
+        immutable = lims.db.execute("select immutable from file_immutability where id=?", (fileid,)).fetchone()
+        if immutable == (1,):
+            delete_text = """<span class="delete_link">Immutable</span>"""
+        else:
+            delete_text = """<input class="delete_link" type="button" value="Delete" onclick="delete_entry('file',%d);" />""" % (fileid,)
         aliases = ['"' + a + '"' for (a,) in 
                    lims.db.execute("select alias from file_alias where file=?",
                                    (fileid,))]
@@ -50,8 +55,7 @@ def file_to_html(lims, id_or_alias):
             origin_text = 'copy of %d' % (origin_value, )
     return("""<div class="file" id="file-%d">
               <a name="file-%d"></a>
-              <h2>%d - %s <a class="download_link" href="download?fileid=%d">Download</a> 
-              <input class="delete_link" type="button" value="Delete" onclick="delete_entry('file',%d);" /></h2>
+              <h2>%d - %s <a class="download_link" href="download?fileid=%d">Download</a> %s</h2>
               <p><span class="label">Aliases</span>
                  <span class="aliases">%s</span></p>
               <p><span class="label">External name</span>
@@ -61,7 +65,7 @@ def file_to_html(lims, id_or_alias):
               <p><span class="label">Created</span>
                  <span class="created">%s</span></p>
               </div>
-	""" % (fileid, fileid, fileid, description, fileid, fileid, alias_text,
+	""" % (fileid, fileid, fileid, description, fileid, delete_text, alias_text,
                external_name, repository_name, origin_text))
 
 def execution_to_html(lims, exid):
@@ -75,6 +79,11 @@ def execution_to_html(lims, exid):
     else:
         [started_at, finished_at, working_directory, description,
          exstr] = fields
+    immutable = lims.db.execute("""select immutable from execution_immutability where id=?""", (exid,)).fetchone()
+    if immutable == (1,):
+        delete_text = """<span class="delete_link">Immutable</span>"""
+    else:
+        delete_text = """<input class="delete_link" type="button" value="Delete" onclick="delete_entry('execution',%d);">""" % (exid,)
     if description == "":
         description = "<em>(no description)</em>"
     if exstr == None:
@@ -95,7 +104,7 @@ def execution_to_html(lims, exid):
  	added_files_text = """<p><span class="label">Added files</span> %s</p>""" % (added_files_text,)
     return("""<div class="execution" id="execution-%d">
               <a name="execution-%d"></a>
-              <h2>%d - %s <input class="delete_link" type="button" value="Delete" onclick="delete_entry('execution',%d);"></h2>
+              <h2>%d - %s %s</h2>
  	<p><span class="label">Ran</span> from %s to %s</p>
  	<p><span class="label">Working directory</span> 
            <span class="working_directory">%s</span></p>
@@ -103,7 +112,7 @@ def execution_to_html(lims, exid):
         %s 
         %s
         </div>
-    """ % (exid, exid, exid, description, exid, started_at_text, finished_at_text, working_directory, used_files_text, added_files_text, programs_to_html(lims,exid), exstr))
+    """ % (exid, exid, exid, description, delete_text, started_at_text, finished_at_text, working_directory, used_files_text, added_files_text, programs_to_html(lims,exid), exstr))
 
 def programs_to_html(lims, exid):
     progids = [x for (x,) in lims.db.execute("""select pos from program where execution=?""", (exid,))]
