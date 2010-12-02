@@ -65,8 +65,9 @@ class ProgramFailed(Exception):
         return("Running '" + " ".join(self.output.arguments) + \
                    "' failed with stderr:\n\t" + "\t".join(self.output.stderr))
 
-
-def unique_filename_in(path):
+def unique_filename_in(path=None):
+    if path == None:
+        path = os.getcwd()
     def random_string():
         return "".join([random.choice(string.letters + string.digits) 
                         for x in range(20)])
@@ -311,7 +312,8 @@ class Execution(object):
         written into the MiniLIMS repository.
         """
         self.programs.append(program)
-    def add(self, filename, description=""):
+    def add(self, filename, description="", associate_to_id=None, 
+            associate_to_filename=None, template=None, alias=None):
         """Add a file to the MiniLIMS object from this execution.
 
         filename is the name of the file in the execution's working
@@ -331,8 +333,8 @@ class Execution(object):
         elif not(os.path.exists(filename)):
             raise IOError("No such file or directory: '"+filename+"'")
         else:
-            self.files.append((filename,description))
-
+            self.files.append((filename,description,associate_to_id,
+                               associate_to_filename,template,alias))
     def finish(self):
         """Set the time when the execution finished."""
         self.finished_at = int(time.time())
@@ -420,11 +422,13 @@ class MiniLIMS(object):
 
        * search_files
        * search_executions
+       * fetch_execution
        * copy_file
        * delete_file
        * delete_execution
        * import_file
        * export_file
+       * fetch_file
        * path_to_file
        * resolve_alias
        * add_alias
@@ -661,10 +665,23 @@ class MiniLIMS(object):
             for j,a in enumerate(p.arguments):
                 self.db.execute("""insert into argument(pos,program,execution,argument) values (?,?,?,?)""",
                                 (j,i,exid,a))
-        for (filename,description) in ex.files:
+        fileids = {}
+        for (filename,description,associate_to_id,associate_to_filename,template,alias) in ex.files:
             self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value) values (?,importfile(?),?,?,?)""",
                             (filename,os.path.abspath(os.path.join(ex.exwd,filename)),
                              description,'execution',exid))
+            fileids[filename] = self.db.execute("""select last_insert_rowid()""").fetchone()[0]
+            if alias != None:
+                self.add_alias(fileids[filename], alias)
+            if template != None and \
+                    (associate_to_id != None or \
+                         associate_to_filename != None):
+                if associate_to_id != None:
+                    target = associate_to_id
+                elif associate_to_filename != None:
+                    target = fileids[associate_to_filename]
+                self.associate_file(fileids[filename],target,
+                                    template)
         for used_file in set(ex.used_files):
             [x for x in self.db.execute("""insert into execution_use(execution,file) values (?,?)""", (exid,used_file))]
         self.db.commit()
@@ -764,6 +781,84 @@ class MiniLIMS(object):
         else:
             matching_programs = []
         return list(set(matching_executions+matching_programs))
+
+    def fetch_file(self, id_or_alias):
+        """Returns a dictionary describing the given file."""
+        fileid = self.resolve_alias(id_or_alias)
+        fields = self.db.execute("""select external_name, repository_name,
+                                    created, description, origin, origin_value
+                                    from file where id=?""", 
+                                 (fileid,)).fetchone()
+        if fields == None:
+            raise ValueError("No such file " + str(id_or_alias) + " in MiniLIMS.")
+        else:
+            [external_name, repository_name, created, description,
+             origin_type, origin_value] = fields
+        if origin_type == 'copy':
+            origin = ('copy',origin_value)
+        elif origin_type == 'execution':
+            origin = ('execution',origin_value)
+        elif origin_type == 'import':
+            origin = 'import'
+        aliases = [a for (a,) in 
+                   self.db.execute("select alias from file_alias where file=?",
+                                   (fileid,))]
+        associations = self.db.execute("""select fileid,template from file_association where
+                                          associated_to=?""", (fileid,)).fetchall()
+        associated_to = self.db.execute("""select associated_to,template from file_association
+                                           where fileid=?""", (fileid,)).fetchall()
+        return {'external_name': external_name,
+                'repository_name': repository_name,
+                'description': description,
+                'origin': origin,
+                'aliases': aliases,
+                'associations': associations,
+                'associated_to': associated_to}
+ 
+    
+    def fetch_execution(self, exid):
+        """Returns a dictionary of all the data corresponding to the given execution id."""
+        def fetch_program(exid, progid):
+            fields = self.db.execute("""select pid,return_code,stdout,stderr
+                                        from program where execution=? and pos=?""",
+                                     (exid, progid)).fetchone()
+            if fields == None:
+                raise ValueError("No such program: execution %d, program %d" % (exid, progid))
+            else:
+                [pid, return_code, stdout, stderr] = fields
+            arguments = [a for (a,) in self.db.execute("""select argument from argument
+                                                          where execution=? and program=?
+                                                          order by pos asc""", (exid,progid))]
+            return {'pid': pid,
+                    'return_code': return_code,
+                    'stdout': stdout,
+                    'stderr': stderr,
+                    'arguments': arguments}
+        exfields = self.db.execute("""select started_at, finished_at, working_directory,
+                                           description, exception from execution
+                                    where id=?""", (exid,)).fetchone()
+        if exfields == None:
+            raise ValueError("No such execution with id %d" % (exid,))
+        else:
+            print exfields
+            (started_at,finished_at,working_directory,
+             description, exception) = exfields
+        progids = [a for (a,) in self.db.execute("""select pos from program where execution=?
+                                                  order by pos asc""", (exid,))]
+        progs = [fetch_program(exid,i) for i in progids]
+        added_files = [a for (a,) in self.db.execute("""select id from file where
+                                                        origin='execution' and origin_value=?""",
+                                                     (exid,))]
+        used_files = [a for (a,) in self.db.execute("""select file from execution_use
+                                                       where execution=?""", (exid,))]
+        return {'started_at': started_at,
+                'finished_at': finished_at,
+                'working_directory': working_directory,
+                'description': description,
+                'exception_string': exception,
+                'programs': progs,
+                'added_files': added_files,
+                'used_files': used_files}
 
     def copy_file(self, file_or_alias):
         """Copy the given file in the MiniLIMS repository.
@@ -936,25 +1031,6 @@ class MiniLIMS(object):
         self.db.execute("""delete from file_association where fileid=? and associated_to=?""", (src,dst))
         self.db.commit()
 
-def get_ex():
-    m = MiniLIMS("test")
-    with execution(m) as ex:
-        # # #    f = bowtie(ex, '../test_data/selected_transcripts', '../test_data/reads-1-1')
-        f = touch(ex)
-        g = sleep.nonblocking(ex,1)
-        ex.add(f)
-        ex.use(1)
-        print g.wait()
-    
-def get_ex1():
-    m = MiniLIMS("test")
-    with execution(m) as ex:
-        f = touch(ex, 'asdf/asdf')
-
-#with execution(m) as ex:
-#     print ex.use(1)
-#     print ex.exwd
-        
 
 # Program library
 
