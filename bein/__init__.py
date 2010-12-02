@@ -325,9 +325,11 @@ class Execution(object):
         """
         if filename == None:
             if description == "":
-                raise("Tried to add None to repository.")
+                raise(IOError("Tried to add None to repository."))
             else:
-                raise("Tried to add None with descrition '" + description +"' to repository.")
+                raise(IOError("Tried to add None with descrition '" + description +"' to repository."))
+        elif not(os.path.exists(filename)):
+            raise IOError("No such file or directory: '"+filename+"'")
         else:
             self.files.append((filename,description))
     def finish(self):
