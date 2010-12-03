@@ -1,4 +1,21 @@
-"""bein - LIMS and workflow manager for bioinformatics
+# bein/__init__.py
+# Copyright 2010 Frederick Ross
+
+# This file is part of bein.
+
+# Bein is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your
+# option) any later version.
+
+# Bein is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+# for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with bein.  If not, see <http://www.gnu.org/licenses/>.
+"""Bein - LIMS and workflow manager for bioinformatics
 by Frederick Ross <madhadron@gmail.com>
 
 Bein contains a miniature LIMS (Laboratory Information Management
@@ -146,7 +163,7 @@ class program(object):
     def __init__(self, gen_args):
         self.gen_args = gen_args
 
-    def __call__(self, ex, *args):
+    def __call__(self, ex, *args, **kwargs):
         """Run a program locally, and block until it completes.
 
         This form takes one argument before those to the decorated
@@ -157,7 +174,7 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to program " + self.gen_args.__name__ + " must be an Execution.")
-        d = self.gen_args(*args)
+        d = self.gen_args(*args, **kwargs)
         sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE,
                               cwd = ex.exwd)
@@ -176,7 +193,7 @@ class program(object):
         else: 
             raise ProgramFailed(po)
 
-    def nonblocking(self, ex, *args):
+    def nonblocking(self, ex, *args, **kwargs):
         """Run a program, but return a Future object instead of blocking.
 
         Like __call__, nonblocking takes an Execution as an extra,
@@ -199,7 +216,7 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
-        d = self.gen_args(*args)
+        d = self.gen_args(*args, **kwargs)
         class Future(object):
             def __init__(self):
                 self.program_output = None
@@ -230,7 +247,7 @@ class program(object):
         a.start()
         return(f)
 
-    def lsf(self, ex, *args):
+    def lsf(self, ex, *args, **kwargs):
         """Run a program via the LSF batch queue.
 
         For the programmer, this method appears identical to
@@ -240,7 +257,7 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
-        d = self.gen_args(*args)
+        d = self.gen_args(*args, **kwargs)
         stdout_filename = unique_filename_in(ex.exwd)
         stderr_filename = unique_filename_in(ex.exwd)
         cmds = ["bsub","-cwd",ex.exwd,"-o",stdout_filename,"-e",stderr_filename,
@@ -394,7 +411,6 @@ def execution(lims = None, description=""):
         shutil.rmtree(ex.exwd, ignore_errors=True)
         os.chdir("..")
 
-
 class MiniLIMS(object):
     """Encapsulates a database and directory to track executions and files.
 
@@ -437,6 +453,7 @@ class MiniLIMS(object):
        * associate_file
        * delete_file_association
        * associated_files_of
+       * last_id
     """
     def __init__(self, path):
         self.db = sqlite3.connect(path, check_same_thread=False)
@@ -512,8 +529,28 @@ class MiniLIMS(object):
              SELECT RAISE(FAIL, 'Cannot change the repository name of a file.');
         END""")
         self.db.execute("""
-        CREATE VIEW file_immutability AS 
-        SELECT file as id, count(execution) > 0 as immutable from execution_use group by file
+        CREATE VIEW file_direct_immutability AS 
+        SELECT file.id as id, count(execution) > 0 as immutable 
+        from file left join execution_use 
+        on file.id = execution_use.file
+        group by file.id
+        """)
+        self.db.execute("""
+        create view all_associations as
+        select file.id as id, file_association.associated_to as target
+        from file inner join file_association
+        on file.id = file_association.fileid
+        union all
+        select file.id as id, file.id as target
+        from file
+        order by id asc
+        """)
+        self.db.execute("""
+        create view file_immutability as
+        select aa.id as id, max(fdi.immutable) as immutable
+        from all_associations as aa left join file_direct_immutability as fdi
+        on aa.target = fdi.id
+        group by aa.id
         """)
         self.db.execute("""
         CREATE VIEW execution_outputs AS
@@ -782,6 +819,10 @@ class MiniLIMS(object):
             matching_programs = []
         return list(set(matching_executions+matching_programs))
 
+    def last_id(self):
+        """Return the id of the last thing written to the repository."""
+        return self.db.execute("select last_insert_rowid()").fetchone()[0]
+
     def fetch_file(self, id_or_alias):
         """Returns a dictionary describing the given file."""
         fileid = self.resolve_alias(id_or_alias)
@@ -807,13 +848,17 @@ class MiniLIMS(object):
                                           associated_to=?""", (fileid,)).fetchall()
         associated_to = self.db.execute("""select associated_to,template from file_association
                                            where fileid=?""", (fileid,)).fetchall()
+        immutable = self.db.execute("select immutable from file_immutability where id=?",
+                                    (fileid,)).fetchone()[0]
         return {'external_name': external_name,
                 'repository_name': repository_name,
+                'created': created,
                 'description': description,
                 'origin': origin,
                 'aliases': aliases,
                 'associations': associations,
-                'associated_to': associated_to}
+                'associated_to': associated_to,
+                'immutable': immutable == 1}
  
     
     def fetch_execution(self, exid):
@@ -840,7 +885,6 @@ class MiniLIMS(object):
         if exfields == None:
             raise ValueError("No such execution with id %d" % (exid,))
         else:
-            print exfields
             (started_at,finished_at,working_directory,
              description, exception) = exfields
         progids = [a for (a,) in self.db.execute("""select pos from program where execution=?
@@ -851,6 +895,9 @@ class MiniLIMS(object):
                                                      (exid,))]
         used_files = [a for (a,) in self.db.execute("""select file from execution_use
                                                        where execution=?""", (exid,))]
+        immutability = self.db.execute("""select immutable from execution_immutability
+            where id=?""", (exid,)).fetchone()[0]
+            
         return {'started_at': started_at,
                 'finished_at': finished_at,
                 'working_directory': working_directory,
@@ -858,7 +905,8 @@ class MiniLIMS(object):
                 'exception_string': exception,
                 'programs': progs,
                 'added_files': added_files,
-                'used_files': used_files}
+                'used_files': used_files,
+                'immutable': immutability == 1}
 
     def copy_file(self, file_or_alias):
         """Copy the given file in the MiniLIMS repository.
