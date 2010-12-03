@@ -885,7 +885,6 @@ class MiniLIMS(object):
         if exfields == None:
             raise ValueError("No such execution with id %d" % (exid,))
         else:
-            print exfields
             (started_at,finished_at,working_directory,
              description, exception) = exfields
         progids = [a for (a,) in self.db.execute("""select pos from program where execution=?
