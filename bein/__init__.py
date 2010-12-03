@@ -512,8 +512,28 @@ class MiniLIMS(object):
              SELECT RAISE(FAIL, 'Cannot change the repository name of a file.');
         END""")
         self.db.execute("""
-        CREATE VIEW file_immutability AS 
-        SELECT file as id, count(execution) > 0 as immutable from execution_use group by file
+        CREATE VIEW file_direct_immutability AS 
+        SELECT file.id as id, count(execution) > 0 as immutable 
+        from file left join execution_use 
+        on file.id = execution_use.file
+        group by file.id
+        """)
+        self.db.execute("""
+        create view all_associations as
+        select file.id as id, file_association.associated_to as target
+        from file inner join file_association
+        on file.id = file_association.fileid
+        union all
+        select file.id as id, file.id as target
+        from file
+        order by id asc
+        """)
+        self.db.execute("""
+        create view file_immutability as
+        select aa.id as id, max(fdi.immutable) as immutable
+        from all_associations as aa left join file_direct_immutability as fdi
+        on aa.target = fdi.id
+        group by aa.id
         """)
         self.db.execute("""
         CREATE VIEW execution_outputs AS
