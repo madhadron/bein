@@ -2,7 +2,10 @@
 beinclient 0.1
 Fred Ross, <fred dot ross at epfl dot ch>
 
-Beinclient is a simple web interface for MiniLIMS repositories.
+Beinclient is a simple web interface for MiniLIMS repositories.  It
+has no security or concept of users, and is meant purely for
+individual use.  However, it may serve as a model if you need to
+access the repository for more sophisticated interfaces.
 """
 from bein import *
 from datetime import *
@@ -17,52 +20,55 @@ from webclient_constants import *
 usage = """beinclient [-p port] [-h] repository
 
 -p port    Listen for HTTP connections on 'port' (default: 8080)
--h         Print this message
+-h         Print this message and exit
 repository MiniLIMS repository to serve
 """
 
-def file_to_html(lims, id_or_alias):
-    fileid = lims.resolve_alias(id_or_alias)
-    fields = lims.db.execute("""select external_name, repository_name,
-                                      created, description, origin,
-                                      origin_value
-                                from file where id=?""", 
-                             (fileid,)).fetchone()
-    if fields == None:
-        raise ValueError("No such file " + str(id_or_alias) + " in MiniLIMS.")
-    else:
-        [external_name, repository_name, created, description,
-         origin, origin_value] = fields
-        immutable = lims.db.execute("select immutable from file_immutability where id=?", (fileid,)).fetchone()
-        if immutable == (1,):
-            delete_text = """<span class="delete_link">Immutable</span>"""
-        else:
-            delete_text = """<input class="delete_link" type="button" value="Delete" onclick="delete_entry('file',%d);" />""" % (fileid,)
-        aliases = ['"' + a + '"' for (a,) in 
-                   lims.db.execute("select alias from file_alias where file=?",
-                                   (fileid,))]
-        if aliases == []:
-            alias_text = "<em>(no aliases)</em>"
-        else:
-            alias_text = ", ".join(aliases)
-        associations = lims.db.execute("select associated_to,template from file_association where fileid=?", (fileid,)).fetchall()
-        if associations == []:
-            association_text = "<em>(no associations)</em>"
-        else:
-            association_text = ", ".join(["""'%s' on file <a href="#file-%d">%d</a> """ % (t,f,f) for (f,t) in associations])
+def file_to_html(fileid, file):
+    """Format a file from the MiniLIMS as HTML.
 
-        if description == "":
-            description = '<em>(no description)</em>'
-        if origin == 'execution':
-            origin_text = """<a href="#execution-%d" onclick="execution_tab();">execution %d</a> at %s""" % (origin_value, origin_value, created)
-            origin_class = "ex%d" % (origin_value,)
-        elif origin == 'import':
-            origin_text = 'manually imported at %s' % (created, )
-            origin_class = "import"
-        elif origin == 'copy':
-            origin_text = 'copy of %d' % (origin_value, )
-            origin_class = "copy%d" % (origin_value,)
-    return("""<div class="created-by-%s">
+    'fileid' is the id the File object was stored under in the
+    repository.  'file' should be a dictionary such as that returned
+    by the fetch_file method of a MiniLIMS object.  The returned HTML
+    is a self contained div.
+    """
+    if file['origin'] == 'import':
+        origin_text = 'manually imported at %s' % file['created']
+        created_by = 'import'
+    elif file['origin'][0] == 'execution':
+        origin_text = '<a href="#execution-%d" onclick="execution_tab();">execution %d</a> at %s' % \
+                      (file['origin'][1], file['origin'][1], file['created'])
+        created_by = 'ex%d' % file['origin'][1]
+    elif file['origin'][0] == 'copy':
+        origin_text = 'copy of %d' % file['origin'][1]
+        created_by = 'copy%d' % file['origin'][1]
+
+    if file['description'] == "":
+        description = '<em>(no description)</em>'
+    else:
+        description = file['description']
+
+    if file['immutable']:
+        delete_text = """<span class="delete_link">Immutable</span>"""
+    else:
+        delete_text = """<input class="delete_link" type="button" value="Delete" onclick="delete_entry('file',%d);" />""" % (fileid,)
+
+    if file['aliases'] == []:
+        alias_text = "<em>(no aliases)</em>"
+    else:
+        alias_text = ", ".join(['"'+a+'"' for a in file['aliases']])
+
+    if file['associations'] == []:
+        association_text = "<em>(no associations)</em>"
+    else:
+        association_text = ", ".join(["""'%s' on file <a href="#file-%d">%d</a> """ % (t,f,f) for (f,t) in file['associations']])
+
+    if file['associated_to'] == []:
+        associated_to_text = "<em>(not associated to any files)</em>"
+    else:
+        associated_to_text = ", ".join(["""'%s' on file <a href="#file-%d">%d</a> """ % (t,f,f) for (f,t) in file['associated_to']])
+        
+    return """<div class="created-by-%s">
               <div class="file" id="file-%d">
               <a name="file-%d"></a>
               <h2>%d - %s <a class="download_link" href="download?fileid=%d">Download</a> %s</h2>
@@ -70,6 +76,8 @@ def file_to_html(lims, id_or_alias):
                  <span class="aliases">%s</span></p>
               <p><span class="label">Associations</span>
                  <span class="associations">%s</span></p>
+              <p><span class="label">Associated to</span>
+                 <span class="associated_to">%s</span></p>
               <p><span class="label">External name</span>
                  <span class="external_name">%s</span></p>
               <p><span class="label">Repository name</span>
@@ -77,96 +85,103 @@ def file_to_html(lims, id_or_alias):
               <p><span class="label">Created</span>
                  <span class="created">%s</span></p>
               </div></div>
-	""" % (origin_class, fileid, fileid, fileid, description,
-               fileid, delete_text, alias_text, association_text, 
-               external_name, repository_name, origin_text))
+	""" % (created_by, fileid, fileid, fileid, description, fileid, delete_text,
+               alias_text, association_text, associated_to_text, file['external_name'],
+               file['repository_name'], origin_text)
 
-def execution_to_html(lims, exid):
-    fields = lims.db.execute("""select started_at, finished_at, 
-                                working_directory, description,
-                                exception
-                                from execution where id=?""",
-                             (exid, )).fetchone()
-    if fields == None:
-        raise ValueError("No such execution " + str(exid) + " in MiniLIMS")
+
+def execution_to_html(exid, ex):
+    """Render an execution into HTML.
+
+    'exid' is the id under which the execution is stored in the
+    repository, and 'ex' is a dictionary such as that returned by the
+    fetch_execution method of a MiniLIMS object.  The returned HTML is
+    a standalone div.
+    """
+    if ex['description'] == "":
+        description = "<em>(no description)</em>"
     else:
-        [started_at, finished_at, working_directory, description,
-         exstr] = fields
-    immutable = lims.db.execute("""select immutable from execution_immutability where id=?""", (exid,)).fetchone()
-    if immutable == (1,):
+        description = ex['description']
+
+    if ex['immutable']:
         delete_text = """<span class="delete_link">Immutable</span>"""
     else:
-        delete_text = """<input class="delete_link" type="button" value="Delete" onclick="delete_entry('execution',%d);">""" % (exid,)
-    if description == "":
-        description = "<em>(no description)</em>"
-    if exstr == None:
+        delete_text = """<input class="delete_link" type="button" value="Delete" onclick="delete_entry('execution',%d);">""" % exid
+
+    started_at_text = datetime.fromtimestamp(ex['started_at']).strftime("%Y-%m-%d %H:%M:%S")
+    finished_at_text = datetime.fromtimestamp(ex['finished_at']).strftime("%Y-%m-%d %H:%M:%S")
+
+    if ex['used_files'] == []:
+        used_files_text = ""
+    else:
+        used_files_text = """<p><span class="label">Used files</span> %s</p>""" % \
+                          (", ".join(["""<a href="#file-%d" onclick="file_tab();">%d</a>""" % (f,f) for f in ex['used_files']]))
+
+    if ex['added_files'] == []:
+        added_files_text = ""
+    else:
+        added_files_text = """<p><span class="label">Added files</span> %s</p>""" % \
+                           (", ".join(["""<a href="#file-%d" onclick="file_tab();">%d</a>""" % (f,f) for f in ex['added_files']]))
+
+    if ex['exception_string'] == None:
         exstr = ""
     else:
-        exstr="""<p><span style="color: red">FAILED</span>: <pre>%s</pre>""" % (exstr,)
-    started_at_text = datetime.fromtimestamp(started_at).strftime("%Y-%m-%d %H:%M:%S")
-    finished_at_text = datetime.fromtimestamp(finished_at).strftime("%Y-%m-%d %H:%M:%S")
-    used_files_text = ", ".join([str(f) for (f,) in
-                                 lims.db.execute("""select file from execution_use 
-                                                    where execution=?""", 
-                                                 (exid,)).fetchall()])
-    if used_files_text != "":
-        used_files_text = """<p><span class="label">Used files</span> %s</p>""" % (used_files_text,)
-    added_files_text = ", ".join(["""<a href="#file-%d" onclick="file_tab();">%d</a>""" % (f,f) for (f,) in
-                                  lims.db.execute("""select id from file where origin='execution' and origin_value=?""", (exid,)).fetchall()])
-    if added_files_text != "":
- 	added_files_text = """<p><span class="label">Added files</span> %s</p>""" % (added_files_text,)
-    return("""<div class="execution" id="execution-%d">
+        exstr="""<p><span style="color: red">FAILED</span>: <pre>%s</pre>""" % ex['exception_string']
+
+    if ex['programs'] == []:
+        program_text = """<div class="program"><h3><em>(no programs)</em></h3></div>"""
+    else:
+        program_text = "".join([program_to_html(p) for p in ex['programs']])
+                                       
+    return """<div class="execution" id="execution-%d">
               <a name="execution-%d"></a>
               <h2>%d - %s %s</h2>
- 	<p><span class="label">Ran</span> from %s to %s</p>
- 	<p><span class="label">Working directory</span> 
-           <span class="working_directory">%s</span></p>
- 	%s %s
-        %s 
-        %s
-        </div>
-    """ % (exid, exid, exid, description, delete_text, started_at_text, finished_at_text, working_directory, used_files_text, added_files_text, programs_to_html(lims,exid), exstr))
+              <p><span class="label">Ran</span> from %s to %s</p>
+              <p><span class="label">Working directory</span> 
+              <span class="working_directory">%s</span></p>
+              %s %s %s %s
+              </div>
+              """ % (exid, exid, exid, description, delete_text,
+                     started_at_text, finished_at_text, ex['working_directory'],
+                     used_files_text, added_files_text, program_text, exstr)
 
-def programs_to_html(lims, exid):
-    progids = [x for (x,) in lims.db.execute("""select pos from program where execution=?""", (exid,))]
-    if progids == []:
-        return """<div class="program"><h3><em>(no programs)</em></h3></div>"""
-    else:
-        return "".join([program_to_html(lims,exid,pos) for pos in progids])
+def program_to_html(program):
+    """Render a program to HTML.
 
-def program_to_html(lims, exid, pos):
-    fields = lims.db.execute("""select pid,return_code,stdout,stderr from program where pos=? and execution=?""", (pos,exid)).fetchone()
-    if fields == None:
-        raise ValueError("Could not get values for program " + str(pos) + " in execution " + str(exid))
+    'program' is a dictionary such as that in the programs field of an
+    execution dictionary returned by the fetch_execution method of a
+    MiniLIMS object.
+    """
+    if program['stdout'] != "":
+        stdout = """<p><span class="program_label">stdout</span><br/><pre>%s</pre></p>""" % program['stdout']
     else:
-        [pid,return_code,stdout,stderr] = fields
-        if stdout != "":
-            stdout = """<p><span class="program_label">stdout</span><br/><pre>%s</pre></p>""" % (stdout,)
-        if stderr != "":
-            stderr = """<p><span class="program_label">stderr</span><br/><pre>%s</pre></p>""" % (stderr)
-    arguments = " ".join([x for (x,) in 
-                          lims.db.execute("""select argument from argument 
-                                            where program=? and execution=? 
-                                            order by pos""", (pos,exid))])
-    argument_color = (return_code == 0) and "black" or "red"
+        stdout = ""
+    if program['stderr'] != "":
+        stderr = """<p><span class="program_label">stderr</span><br/><pre>%s</pre></p>""" % progrma['stderr']
+    else:
+        stderr = ""
+    arguments = " ".join(program['arguments'])
+    argument_color = (program['return_code'] == 0) and "black" or "red"
     return """<div class="program">
               <h3 style="color: %s;"><tt>%s</tt></h3>
               <p>Pid %d exited with value %d</p>
               %s
               %s
-              </div>""" % (argument_color, arguments, pid, return_code, stdout, stderr)
+              </div>""" % (argument_color, arguments, program['pid'],
+                           program['return_code'], stdout, stderr)
 
 
 class BeinClient(object):
-    def __init__(self, minilims):
-        self.minilims_path = minilims
-        self.minilims = MiniLIMS(minilims)
+    def __init__(self, lims):
+        self.lims = MiniLIMS(lims)
     
     @cherrypy.expose
     def index(self):
         return html_header + self.executions_tab() + self.files_tab() \
             + html_footer
 
+    # minilimscss, jquery, and jscript are ancillary files giving the
+    # CSS and JavaScript for the client.
     @cherrypy.expose
     def minilimscss(self):
         cherrypy.response.headers['Content-Type']='text/css'
@@ -180,6 +195,8 @@ class BeinClient(object):
     def jscript(self):
         return jscript
 
+    # delete is a method to be called by JQuery.  It doesn't return
+    # anything in particular, but deletes a file.
     @cherrypy.expose
     def delete(self, obj_type=None, obj_id=None):
         try:
@@ -187,34 +204,32 @@ class BeinClient(object):
         except ValueError, v:
             return "Bad value!"
         if obj_type == "execution":
-            self.minilims.delete_execution(obj_id)
+            self.lims.delete_execution(obj_id)
             return ""
         if obj_type == "file":
-            self.minilims.delete_file(obj_id)
+            self.lims.delete_file(obj_id)
             return ""
         else:
             return "Unknown object type."
 
     @cherrypy.expose
     def download(self, fileid=None):
-        (repository_name, external_name) = self.minilims.db.execute("select repository_name,external_name from file where id = ?", (fileid,)).fetchone()
-        return serve_file(os.path.join(self.minilims.file_path, 
-                                       repository_name),
+        """Serve a file to the user with the MiniLIMS external name."""
+        external_name = self.lims.fetch_file(int(fileid))['external_name']
+        repository_path = self.lims.path_to_file(int(fileid))
+        return serve_file(repository_path,
                           content_type = "application/x-download", 
                           disposition = "attachment",
                           name = external_name)
 
     def executions_tab(self):
-        return """<div id="tabs-1" class="tab_content">""" + \
-            "".join([execution_to_html(self.minilims, ex)
-                     for (ex,) in self.minilims.db.execute("select id from execution").fetchall()]) + \
-            """</div>"""
-
+        return """<div id="tabs-1" class="tab_content">%s</div>""" % \
+               "".join([execution_to_html(exid, self.lims.fetch_execution(exid))
+                        for exid in self.lims.search_executions()])
+    
     def files_tab(self):
-        return """<div id="tabs-2" class="tab_content">""" + \
-            "".join([file_to_html(self.minilims, f)
-                     for (f,) in self.minilims.db.execute("select id from file").fetchall()]) + \
-            """</div>"""
+        return """<div id="tabs-2" class="tab_content">%s</div>""" % \
+               "".join([file_to_html(id,self.lims.fetch_file(id)) for id in self.lims.search_files()])
 
 class Usage(Exception):
     def __init__(self,  msg):
@@ -238,13 +253,13 @@ def main(argv = None):
                 port = int(a)
         if len(args) != 1:
             raise Usage("No MiniLIMS repository specified.")
-        minilims = args[0]
-        print "MiniLIMS repository: ", minilims
-        if not(os.path.exists(minilims)) or \
-                not(os.path.isdir(minilims + '.files')):
-            raise Usage("No MiniLIMS repository found at " + minilims)
+        lims = args[0]
+        print "MiniLIMS repository: ", lims
+        if not(os.path.exists(lims)) or \
+                not(os.path.isdir(lims + '.files')):
+            raise Usage("No MiniLIMS repository found at " + lims)
         cherrypy.config.update({'server.socket_port':port})
-        cherrypy.quickstart(BeinClient(minilims))
+        cherrypy.quickstart(BeinClient(lims))
         sys.exit(0)
     except Usage, err:
         print >>sys.stderr, err.msg

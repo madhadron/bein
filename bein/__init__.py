@@ -831,6 +831,7 @@ class MiniLIMS(object):
                                     (fileid,)).fetchone()[0]
         return {'external_name': external_name,
                 'repository_name': repository_name,
+                'created': created,
                 'description': description,
                 'origin': origin,
                 'aliases': aliases,
