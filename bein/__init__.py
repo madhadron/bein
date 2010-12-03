@@ -411,7 +411,6 @@ def execution(lims = None, description=""):
         shutil.rmtree(ex.exwd, ignore_errors=True)
         os.chdir("..")
 
-
 class MiniLIMS(object):
     """Encapsulates a database and directory to track executions and files.
 
@@ -454,6 +453,7 @@ class MiniLIMS(object):
        * associate_file
        * delete_file_association
        * associated_files_of
+       * last_id
     """
     def __init__(self, path):
         self.db = sqlite3.connect(path, check_same_thread=False)
@@ -818,6 +818,10 @@ class MiniLIMS(object):
         else:
             matching_programs = []
         return list(set(matching_executions+matching_programs))
+
+    def last_id(self):
+        """Return the id of the last thing written to the repository."""
+        return self.db.execute("select last_insert_rowid()").fetchone()[0]
 
     def fetch_file(self, id_or_alias):
         """Returns a dictionary describing the given file."""
