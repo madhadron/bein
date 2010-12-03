@@ -163,7 +163,7 @@ class program(object):
     def __init__(self, gen_args):
         self.gen_args = gen_args
 
-    def __call__(self, ex, *args):
+    def __call__(self, ex, *args, **kwargs):
         """Run a program locally, and block until it completes.
 
         This form takes one argument before those to the decorated
@@ -174,7 +174,7 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to program " + self.gen_args.__name__ + " must be an Execution.")
-        d = self.gen_args(*args)
+        d = self.gen_args(*args, **kwargs)
         sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE,
                               cwd = ex.exwd)
@@ -193,7 +193,7 @@ class program(object):
         else: 
             raise ProgramFailed(po)
 
-    def nonblocking(self, ex, *args):
+    def nonblocking(self, ex, *args, **kwargs):
         """Run a program, but return a Future object instead of blocking.
 
         Like __call__, nonblocking takes an Execution as an extra,
@@ -216,7 +216,7 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
-        d = self.gen_args(*args)
+        d = self.gen_args(*args, **kwargs)
         class Future(object):
             def __init__(self):
                 self.program_output = None
@@ -247,7 +247,7 @@ class program(object):
         a.start()
         return(f)
 
-    def lsf(self, ex, *args):
+    def lsf(self, ex, *args, **kwargs):
         """Run a program via the LSF batch queue.
 
         For the programmer, this method appears identical to
@@ -257,7 +257,7 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
-        d = self.gen_args(*args)
+        d = self.gen_args(*args, **kwargs)
         stdout_filename = unique_filename_in(ex.exwd)
         stderr_filename = unique_filename_in(ex.exwd)
         cmds = ["bsub","-cwd",ex.exwd,"-o",stdout_filename,"-e",stderr_filename,

@@ -175,7 +175,7 @@ def program_to_html(program):
     else:
         stdout = ""
     if program['stderr'] != "":
-        stderr = """<p><span class="program_label">stderr</span><br/><pre>%s</pre></p>""" % progrma['stderr']
+        stderr = """<p><span class="program_label">stderr</span><br/><pre>%s</pre></p>""" % program['stderr']
     else:
         stderr = ""
     arguments = " ".join(program['arguments'])
