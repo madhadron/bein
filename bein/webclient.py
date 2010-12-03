@@ -241,13 +241,17 @@ class BeinClient(object):
                           name = external_name)
 
     def executions_tab(self):
+        exids = self.lims.search_executions()
+        exids.sort()
         return """<div id="tabs-1" class="tab_content">%s</div>""" % \
                "".join([execution_to_html(exid, self.lims.fetch_execution(exid))
-                        for exid in self.lims.search_executions()])
+                        for exid in exids])
     
     def files_tab(self):
+        fileids = self.lims.search_files()
+        fileids.sort()
         return """<div id="tabs-2" class="tab_content">%s</div>""" % \
-               "".join([file_to_html(id,self.lims.fetch_file(id)) for id in self.lims.search_files()])
+               "".join([file_to_html(id,self.lims.fetch_file(id)) for id in fileids])
 
 class Usage(Exception):
     def __init__(self,  msg):
