@@ -827,13 +827,16 @@ class MiniLIMS(object):
                                           associated_to=?""", (fileid,)).fetchall()
         associated_to = self.db.execute("""select associated_to,template from file_association
                                            where fileid=?""", (fileid,)).fetchall()
+        immutable = self.db.execute("select immutable from file_immutability where id=?",
+                                    (fileid,)).fetchone()[0]
         return {'external_name': external_name,
                 'repository_name': repository_name,
                 'description': description,
                 'origin': origin,
                 'aliases': aliases,
                 'associations': associations,
-                'associated_to': associated_to}
+                'associated_to': associated_to,
+                'immutable': immutable == 1}
  
     
     def fetch_execution(self, exid):
@@ -871,6 +874,9 @@ class MiniLIMS(object):
                                                      (exid,))]
         used_files = [a for (a,) in self.db.execute("""select file from execution_use
                                                        where execution=?""", (exid,))]
+        immutability = self.db.execute("""select immutable from execution_immutability
+            where id=?""", (exid,)).fetchone()[0]
+            
         return {'started_at': started_at,
                 'finished_at': finished_at,
                 'working_directory': working_directory,
@@ -878,7 +884,8 @@ class MiniLIMS(object):
                 'exception_string': exception,
                 'programs': progs,
                 'added_files': added_files,
-                'used_files': used_files}
+                'used_files': used_files,
+                'immutable': immutability == 1}
 
     def copy_file(self, file_or_alias):
         """Copy the given file in the MiniLIMS repository.
