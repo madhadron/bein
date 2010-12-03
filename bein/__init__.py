@@ -1030,34 +1030,3 @@ class MiniLIMS(object):
         dst = self.resolve_alias(associated_to)
         self.db.execute("""delete from file_association where fileid=? and associated_to=?""", (src,dst))
         self.db.commit()
-
-
-# Program library
-
-@program
-def bowtie(index, reads):
-    sam_filename = unique_filename_in(os.getcwd())
-    return {"arguments": ["bowtie", "-Sra", index, reads,sam_filename],
-            "return_value": sam_filename}
-
-
-@program
-def sam_to_bam(sam_filename):
-    bam_filename = unique_filename_in(os.getcwd())
-    return {"arguments": ["samtools","view","-b","-S","-o",bam_filename,sam_filename],
-            "return_value": bam_filename}
-
-
-@program
-def touch(filename = None):
-    if filename == None:
-        filename = unique_filename_in(os.getcwd())
-    return {"arguments": ["touch",filename],
-            "return_value": filename}
-
-
-@program
-def sleep(n):
-    return {"arguments": ["sleep", str(n)],
-            "return_value": lambda q: n}
-
