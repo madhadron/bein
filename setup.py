@@ -6,4 +6,5 @@ setup(name='bein',
       author_email='madhadron@gmail.com',
       packages=['bein'],
       scripts=['beinclient'],
+      classifiers=['Topic :: System :: Shells', 'Topic :: Scientific/Engineering :: Bio-Informatics']
       )
