@@ -110,6 +110,8 @@ def bowtie(index, reads, args="-Sra"):
     else:
         raise ValueError("bowtie's args keyword argument requires a string or a " + \
                          "list of strings.  Received: " + str(args))
+    if isinstance(reads, list):
+        reads = ",".join(reads)
     return {"arguments": ["bowtie"] + options + [index, reads,sam_filename],
             "return_value": sam_filename}
 
