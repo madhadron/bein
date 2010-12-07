@@ -19,15 +19,14 @@
 
 from contextlib import contextmanager
 import pickle
-from pylab import *
+import pylab
 import re
 import sys
 import os
 from bein import *
 
-#################
 # Basic utilities
-#################
+
 
 def pause():
     """Pause until the user hits Return."""
@@ -214,9 +213,9 @@ def merge_bam(files):
             'return_value': filename}
 
 
-###########################
+
 # Adding special file types
-###########################
+
 
 def add_pickle(ex, val, description=""):
     """Pickle 'val', and add it to the repository.
@@ -245,7 +244,7 @@ def add_figure(ex, figure_type='eps', description=""):
     This will plot a histogram of a with the x axis label set, and
     write the plot to the repository as an EPS file.
     """
-    f = figure()
+    f = pylab.figure()
     yield f
     filename = unique_filename_in() + '.' + figure_type
     f.savefig(filename)
