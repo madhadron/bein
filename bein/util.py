@@ -131,7 +131,7 @@ def bowtie_build(files, index = None):
             'return_value': index}
 
 
-def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra"):
+def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
     """Run bowtie in parallel on pieces of 'reads'.
 
     Splits 'reads' into chunks 'n_lines' long, then runs bowtie with
@@ -139,21 +139,31 @@ def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra"):
     the arguments needs to be -S so the output takes the form of SAM
     files, because the results are converted to BAM and merged.  The
     filename of the single, merged BAM file is returned.
+
+    Bowtie does not set the NH flag on its SAM file output.  If the
+    ``add_nh_flags`` argument is ``True``, this function calculates
+    and adds the flag before merging the BAM files.
     """
     subfiles = split_file(ex, reads, n_lines = n_lines)
     futures = [bowtie.nonblocking(ex, index, sf, args = bowtie_args) for sf in subfiles]
     samfiles = [f.wait() for f in futures]
-    futures = [sam_to_bam.nonblocking(ex, sf) for sf in samfiles]
-    bamfiles = [f.wait() for f in futures]
+    if add_nh_flags:
+        bamfiles = [add_nh_flag(sf) for sf in samfiles]
+    else:
+        futures = [sam_to_bam.nonblocking(ex, sf) for sf in samfiles]
+        bamfiles = [f.wait() for f in futures]
     return merge_bamfiles.nonblocking(ex, bamfiles).wait()
 
-def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra"):
+def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
     """Identical to parallel_bowtie, but runs programs via LSF."""
     subfiles = split_file(ex, reads, n_lines = n_lines)
     futures = [bowtie.lsf(ex, index, sf, args = bowtie_args) for sf in subfiles]
     samfiles = [f.wait() for f in futures]
-    futures = [sam_to_bam.lsf(ex, sf) for sf in samfiles]
-    bamfiles = [f.wait() for f in futures]
+    if add_nh_flags:
+        bamfiles = [add_nh_flag(sf) for sf in samfiles]
+    else:
+        futures = [sam_to_bam.lsf(ex, sf) for sf in samfiles]
+        bamfiles = [f.wait() for f in futures]
     return merge_bam.lsf(ex, bamfiles).wait()
 
 ###############
@@ -212,7 +222,44 @@ def merge_bam(files):
     return {'arguments': ['samtools','merge',filename] + files,
             'return_value': filename}
 
+def split_by_readname(samfile):
+    """Return an iterator over a samfiles reads grouped by read name.
 
+    The SAM file produced by bowtie is sorted by read name.  Often we
+    want to work with all of the alignments of a particular read at
+    once.  This function turns the flat list of reads into a list of
+    lists of reads, where each sublist has the same read name.
+    """
+    last_read = None
+    for r in samfile:
+        if r.qname != last_read:
+            if last_read != None:
+                yield accum
+            accum = [r]
+            last_read = r.qname
+        else:
+            accum.append(r)
+
+def add_nh_flag(samfile):
+    """Adds NH (Number of Hits) flag to each read alignment.
+    
+    Scans a TAM file ordered by read name, counts the number of
+    alternative alignments reported and writes them to a BAM file
+    with the NH tag added.
+    """
+    infile = pysam.Samfile(samfile, "r")
+    outname = unique_filename_in()
+    outfile = pysam.Samfile(outname, "wb", template=infile)
+    for readset in split_by_readname(infile):
+        nh = len(readset)
+        for read in readset:
+            if (read.is_unmapped):
+                nh = 0
+            read.tags = read.tags+[("NH",nh)]
+            outfile.write(r)
+    infile.close()
+    outfile.close()
+    return outname
 
 # Adding special file types
 
