@@ -15,8 +15,14 @@
 
 # You should have received a copy of the GNU General Public License
 # along with bein.  If not, see <http://www.gnu.org/licenses/>.
-"""Bein - LIMS and workflow manager for bioinformatics
-by Frederick Ross <madhadron@gmail.com>
+"""
+:mod:`bein` -- LIMS and workflow manager for bioinformatics
+===========================================================
+
+.. module:: bein
+   :platform: Unix
+   :synopsis: Workflow and provenance manager for bioinformatics
+.. moduleauthor:: Fred Ross <madhadron at gmail dot com>   
 
 Bein contains a miniature LIMS (Laboratory Information Management
 System) and a workflow manager.  It was written for the Bioinformatics
@@ -25,33 +31,25 @@ Lausanne.  It is aimed at processes just complicated enough where the
 Unix shell becomes problematic, but not so large as to justify all the
 machinery of big workflow managers like KNIME or Galaxy.
 
+This module contains all the core logic and functionality of bein.
+
 There are three core classes you need to understand:
 
-program
--------
-Programs are functions which are turned into callable objects by the
-@program decorator.  They provide a very clean way of binding programs
-into bein so that all the machinery of workflow management and LIMS
-functions properly.
-
 execution
----------
-The actual class is Execution, but it is generally created with the
-execution contextmanager.  An execution tracks all the information
-about a run of a given set of programs.  It corresponds roughly to a
-script in shell.
-
-Executions are run in a temporary directory.  The execution provides
-methods to pull in files from the LIMS for use, write files back to
-the LIMS, and tracks all arguments, pids, outputs, and exit codes of
-programs run during the execution.
+    The actual class is Execution, but it is generally created with the
+    execution contextmanager.  An execution tracks all the information
+    about a run of a given set of programs.  It corresponds roughly to a
+    script in shell.
 
 MiniLIMS
---------
-MiniLIMS represents a database and a directory of files.  The database
-stores metainformation about the files and records all executions run
-with this LIMS.  You can go back and examine the return code, stdout,
-stderr, imported files, etc. from any execution.
+    MiniLIMS represents a database and a directory of files.  The database
+    stores metainformation about the files and records all executions run
+    with this MiniLIMS.  You can go back and examine the return code, stdout,
+    stderr, imported files, etc. from any execution.
+
+program
+    The @program decorator provides a very simple way to bind external
+    programs into bein for use in executions.
 """
 import subprocess
 import random
@@ -67,6 +65,13 @@ from contextlib import contextmanager
 # miscellaneous types
 
 class ProgramOutput(object):
+    """Object passed to return_value functions when binding programs.
+
+    Programs bound with ``@program`` can call a function when they are
+    finished to create a return value from their output.  The output
+    is passed as a ``ProgramObject``, containing all the information
+    available to bein about that program.
+    """
     def __init__(self, return_code, pid, arguments, stdout, stderr):
         self.return_code = return_code
         self.pid = pid
@@ -76,6 +81,7 @@ class ProgramOutput(object):
 
 
 class ProgramFailed(Exception):
+    """Thrown when a program bound by ``@program`` exits with a value other than 0."""
     def __init__(self, output):
         self.output = output
     def __str__(self):
@@ -83,6 +89,12 @@ class ProgramFailed(Exception):
                    "' failed with stderr:\n\t" + "\t".join(self.output.stderr))
 
 def unique_filename_in(path=None):
+    """Return a random filename unique in the given path.
+
+    The filename returned is twenty alphanumeric characters which are
+    not already serving as a filename in ``path``.  If ``path`` is
+    omitted, it defaults to the current working directory.
+    """
     if path == None:
         path = os.getcwd()
     def random_string():
@@ -97,71 +109,72 @@ def unique_filename_in(path=None):
 # programs
 
 class program(object):
-    """Decorator to wrap make programs for use by bein.
+    """Decorator to wrap external programs for use by bein.
 
-    Bein depends on external programs to do all its work.  In this
-    sense, it's a strange version of a shell.  To make it easy to bind
-    programs (generally one or two lines), we provide the @program
-    decorator.
+    Bein depends on external programs to do most of its work.  In this
+    sense, it's a strange version of a shell.  The ``@program`` decorator
+    makes bindings to external programs only a couple lines long.
 
     To wrap a program, write a function that takes whatever arguments
     you will need to vary in calling the program (for instance, the
     filename for touch or the number of seconds to sleep for sleep).
     This function should return a dictionary containing two keys,
-    "arguments" and "return_value".  "arguments" should point to a
-    list of strings which is the actual command and arguments to be
-    executed (["touch",filename] for touch, for instance).
-    "return_value" should point to a value to return, or a callable
+    ``'arguments'`` and ``'return_value'``.  ``'arguments'`` should
+    point to a list of strings which is the actual command and
+    arguments to be executed (``["touch",filename]`` for touch, for instance).
+    ``'return_value'`` should point to a value to return, or a callable
     object which takes a ProgramOutput object and returns the value
     that will be passed back to the user when this program is run.
 
     For example, to wrap touch, we write a one argument function that
-    takes the filename of the file to touch, and apply the @program
-    decorator to it.
+    takes the filename of the file to touch, and apply the ``@program``
+    decorator to it::
 
-    @program
-    def touch(filename):
-        return {"arguments": ["touch",filename],
-                "return_value": filename}
+        @program
+        def touch(filename):
+            return {"arguments": ["touch",filename],
+                    "return_value": filename}
 
     Once we have such a function, how do we call it?  We can call it
-    directly, but @program inserts an additional argument at the
+    directly, but ``@program`` inserts an additional argument at the
     beginning of the argument list to take the execution the program
-    is run in.  Typically it will be run like
+    is run in.  Typically it will be run like::
 
-    with execution(lims) as ex:
-        touch(ex, "myfile")
+        with execution(lims) as ex:
+            touch(ex, "myfile")
 
-    lims is a MiniLIMs object.  The ProgramOutput of touch is
-    automatically recorded to the execution 'ex' and stored in the
-    MiniLIMS.  The value returned by touch is "myfile", the name of
+    where ``lims`` is a MiniLIMs object.  The ProgramOutput of touch
+    is automatically recorded to the execution ``ex`` and stored in the
+    MiniLIMS.  The value returned by touch is ``"myfile"``, the name of
     the touched file.
 
     Often you want to call a function, but not block when it returns
-    so you can run several in parallel.  @program also creates a
-    method 'nonblocking' which does this.  The return value is a
-    Future object with a single method: wait().  When you call wait(),
-    it blocks until the program finishes, then returns the same value
-    that you would get from calling the function directly.  So to
-    touch two files, and not block until both commands have started,
-    you would write,
+    so you can run several in parallel.  ``@program`` also creates a
+    method ``nonblocking`` which does this.  The return value is a
+    Future object with a single method: ``wait()``.  When you call
+    ``wait()``, it blocks until the program finishes, then returns the
+    same value that you would get from calling the function directly.
+    So to touch two files, and not block until both commands have
+    started, you would write::
 
-    with execution(lims) as ex:
-        a = touch.nonblocking(ex, "myfile1")
-        b = touch.nonblocking(ex, "myfile2")
-        a.wait()
-        b.wait()
+        with execution(lims) as ex:
+            a = touch.nonblocking(ex, "myfile1")
+            b = touch.nonblocking(ex, "myfile2")
+            a.wait()
+            b.wait()
 
     If you are on a system using the LSF batch submission system, you
-    can also call the lsf method with exactly the same arguments as
-    nonblocking to run the program as a batch job.
+    can also call the ``lsf`` method with exactly the same arguments as
+    nonblocking to run the program as a batch job::
 
-    with execution(lims) as ex:
-        a = touch.lsf(ex, "myfile1")
-        a.wait()
+        with execution(lims) as ex:
+            a = touch.lsf(ex, "myfile1")
+            a.wait()
     """
     def __init__(self, gen_args):
         self.gen_args = gen_args
+        self.__doc__ = gen_args.__doc__
+        self.__name__ = gen_args.__name__
 
     def __call__(self, ex, *args, **kwargs):
         """Run a program locally, and block until it completes.
@@ -177,7 +190,7 @@ class program(object):
         d = self.gen_args(*args, **kwargs)
         sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE,
-                              cwd = ex.exwd)
+                              cwd = ex.working_directory)
         return_code = sp.wait()
         po = ProgramOutput(return_code, sp.pid,
                                 d["arguments"], 
@@ -230,7 +243,7 @@ class program(object):
         def g():
             sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
-                                  cwd = ex.exwd)
+                                  cwd = ex.working_directory)
             return_code = sp.wait()
             f.program_output = ProgramOutput(return_code, sp.pid,
                                              d["arguments"], 
@@ -258,9 +271,9 @@ class program(object):
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args, **kwargs)
-        stdout_filename = unique_filename_in(ex.exwd)
-        stderr_filename = unique_filename_in(ex.exwd)
-        cmds = ["bsub","-cwd",ex.exwd,"-o",stdout_filename,"-e",stderr_filename,
+        stdout_filename = unique_filename_in(ex.working_directory)
+        stderr_filename = unique_filename_in(ex.working_directory)
+        cmds = ["bsub","-cwd",ex.working_directory,"-o",stdout_filename,"-e",stderr_filename,
                 "-K","-r"] + d["arguments"]
         class Future(object):
             def __init__(self):
@@ -277,11 +290,11 @@ class program(object):
             return_code = sp.wait()
             stdout = None
             stderr = None
-            while not(os.path.exists(os.path.join(ex.exwd, stdout_filename))):
+            while not(os.path.exists(os.path.join(ex.working_directory, stdout_filename))):
                 pass # We need to wait until the files actually show up
-            with open(os.path.join(ex.exwd,stdout_filename), 'r') as fo:
+            with open(os.path.join(ex.working_directory,stdout_filename), 'r') as fo:
                 stdout = fo.readlines()
-            with open(os.path.join(ex.exwd,stderr_filename), 'r') as fe:
+            with open(os.path.join(ex.working_directory,stderr_filename), 'r') as fe:
                 stderr = fe.readlines()
             f.program_output = ProgramOutput(return_code, sp.pid,
                                              cmds, stdout, stderr)
@@ -298,7 +311,7 @@ class program(object):
 
 
 class Execution(object):
-    """Execution objects hold the state of a current running execution.
+    """``Execution`` objects hold the state of a current running execution.
     
     You should generally use the execution function below to create an
     Execution, since it sets up the working directory properly.
@@ -307,15 +320,15 @@ class Execution(object):
     records all the information onf programs that were run during it,
     fetches files from it, and writes files back to it.
 
-    The important methods for the user to know are 'add' and 'use'.
-    Everything else is used internally by bein.  'add' puts a file
+    The important methods for the user to know are ``add`` and ``use``.
+    Everything else is used internally by bein.  ``add`` puts a file
     into the LIMS repository from the execution's working directory.
-    'use' fetches a file from the LIMS repository into the working
+    ``use`` fetches a file from the LIMS repository into the working
     directory.
     """
-    def __init__(self, lims, exwd):
+    def __init__(self, lims, working_directory):
         self.lims = lims
-        self.exwd = exwd
+        self.working_directory = working_directory
         self.programs = []
         self.files = []
         self.used_files = []
@@ -369,10 +382,10 @@ class Execution(object):
         try:
             filename = [x for (x,) in 
                         self.lims.db.execute("select exportfile(?,?)", 
-                                             (fileid, self.exwd))][0]
+                                             (fileid, self.working_directory))][0]
             for (f,t) in self.lims.associated_files_of(fileid):
                 self.lims.db.execute("select exportfile(?,?)",
-                                     (f, os.path.join(self.exwd,t % filename)))
+                                     (f, os.path.join(self.working_directory,t % filename)))
             self.used_files.append(fileid)
             return filename
         except ValueError, v:
@@ -381,16 +394,18 @@ class Execution(object):
 
 @contextmanager
 def execution(lims = None, description=""):
-    """Create an Execution connected to the given MiniLIMS object.
+    """Create an ``Execution`` connected to the given MiniLIMS object.
     
-    execution is a contextmanager, so it can be used in a with
-    statement, as in,
+    ``execution`` is a ``contextmanager``, so it can be used in a ``with``
+    statement, as in::
 
-    with execution(mylims) as ex:
-        touch('boris')
+        with execution(mylims) as ex:
+            touch('boris')
 
-    It creates a temporary directory where the execution will work and
-    sets up the Execution object, then writes the Execution to the
+    It creates a temporary directory where the execution will work,
+    sets up the ``Execution`` object, then runs the body of the
+    ``with`` statement.  After the body finished, or if it fails and
+    throws an exception, ``execution`` writes the ``Execution`` to the
     MiniLIMS repository and deletes the temporary directory after all
     is finished.
     """
@@ -408,52 +423,49 @@ def execution(lims = None, description=""):
         ex.finish()
         if lims != None:
             lims.write(ex, description, exception_string)
-        shutil.rmtree(ex.exwd, ignore_errors=True)
+        shutil.rmtree(ex.working_directory, ignore_errors=True)
         os.chdir("..")
 
 class MiniLIMS(object):
     """Encapsulates a database and directory to track executions and files.
 
     A MiniLIMS repository consists of a SQLite database and a
-    directory of the same name with '.files' appended where all files
+    directory of the same name with ``.files`` appended where all files
     kept in the repository are stored.  For example, if the SQLite
-    database is '/home/boris/myminilims', then there is a directory
-    '/home/boris/myminilims.files' with all the corresponding files.
+    database is ``/home/boris/myminilims``, then there is a directory
+    ``/home/boris/myminilims.files`` with all the corresponding files.
     You should never edit the repository by hand!.
 
     If you create a MiniLIMS object pointing to a nonexistent
     database, then it creates the database and the file directory.
 
-    The MiniLIMS database has a set of tables 'execution', 'program',
-    'argument', and 'execution_use' where Execution objects are
-    recorded.  Each Execution object corresponds to a single id in the
-    execution table.  There is also a table called 'file' which points
-    to files added to the repository, and a number of views and
-    triggers to maintain the repository's integrity.
+    Basic file operations:
+      * :meth:`import_file`
+      * :meth:`export_file`
+      * :meth:`path_to_file`
+      * :meth:`copy_file`
 
-    All the work of writing an Execution into the repository is done
-    by the 'write' method.  Users should generally not call this.  In
-    addition, several methods are meant for use by the database.  The
-    methods a user should use are:
+    Fetching files and executions:
+      * :meth:`fetch_file`
+      * :meth:`fetch_execution`
 
-       * search_files
-       * search_executions
-       * fetch_execution
-       * copy_file
-       * delete_file
-       * delete_execution
-       * import_file
-       * export_file
-       * fetch_file
-       * path_to_file
-       * resolve_alias
-       * add_alias
-       * delete_alias
-       * resolve_alias
-       * associate_file
-       * delete_file_association
-       * associated_files_of
-       * last_id
+    Deleting files and executions:
+      * :meth:`delete_file`
+      * :meth:`delete_execution`
+
+    Searching files and executions:      
+      * :meth:`search_files`
+      * :meth:`search_executions`
+
+    File aliases:
+      * :meth:`resolve_alias`
+      * :meth:`add_alias`
+      * :meth:`delete_alias`
+
+    File associations:      
+      * :meth:`associate_file`
+      * :meth:`delete_file_association`
+      * :meth:`associated_files_of`
     """
     def __init__(self, path):
         self.db = sqlite3.connect(path, check_same_thread=False)
@@ -692,7 +704,7 @@ class MiniLIMS(object):
                                               working_directory,description,
                                               exception) 
                         values (?,?,?,?,?)""",
-                        (ex.started_at, ex.finished_at, ex.exwd, description,
+                        (ex.started_at, ex.finished_at, ex.working_directory, description,
                          exception_string))
         [exid] = [x for (x,) in self.db.execute("select last_insert_rowid()")]
         for i,p in enumerate(ex.programs):
@@ -705,7 +717,7 @@ class MiniLIMS(object):
         fileids = {}
         for (filename,description,associate_to_id,associate_to_filename,template,alias) in ex.files:
             self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value) values (?,importfile(?),?,?,?)""",
-                            (filename,os.path.abspath(os.path.join(ex.exwd,filename)),
+                            (filename,os.path.abspath(os.path.join(ex.working_directory,filename)),
                              description,'execution',exid))
             fileids[filename] = self.db.execute("""select last_insert_rowid()""").fetchone()[0]
             if alias != None:
@@ -730,22 +742,23 @@ class MiniLIMS(object):
         Finds files which satisfy all the criteria which are not None.
         The criteria are:
 
-           * with_text: The file's external_name or description
-             contains 'with_text'
+           * ``with_text``: The file's external_name or description
+             contains ``with_text``
 
-           * older_than: The file's created time is earlier than
-             'older_than'.  This should be of the form "YYYY:MM:DD
+           * ``older_than``: The file's created time is earlier than
+             ``older_than``.  This should be of the form "YYYY:MM:DD
              HH:MM:SS".  Final fields can be omitted, so "YYYY" and
              "YYYY:MM:DD HH:MM" are also valid date formats.
 
-           * newer_than: The file's created time is later than
-             'newer_then', using the same format as 'older_than'.
+           * ``newer_than``: The file's created time is later than
+             ``newer_then``, using the same format as ``older_than``.
 
-           * source: Where the file came from.  Can be one of
-             'execution', 'copy', 'import', ('execution',exid), or
-             ('copy',srcid), where exid is the id of the execution
-             that created this file, and srcid is the file id of the
-             file which was copied to create this one.
+           * ``source``: Where the file came from.  Can be one of
+             ``'execution'``, ``'copy'``, ``'import'``,
+             ``('execution',exid)``, or ``('copy',srcid)``, where
+             ``exid`` is the numeric ID of the execution that created
+             this file, and ``srcid`` is the file ID of the file which
+             was copied to create this one.
         """
         if not(isinstance(source, tuple)):
             source = (source,None)
@@ -770,25 +783,25 @@ class MiniLIMS(object):
         Returns a list of execution ids of executions which satisfy
         all the criteria which are not None.  The criteria are:
 
-           * with_text: The execution's description or one of the
-             program arguments in the execution contains 'with_text'.
+           * ``with_text``: The execution's description or one of the
+             program arguments in the execution contains ``with_text``.
 
-           * started_before: The execution started running before
-             'start_before'.  This should be of the form "YYYY:MM:DD
+           * ``started_before``: The execution started running before
+             ``start_before``.  This should be of the form "YYYY:MM:DD
              HH:MM:SS".  Final fields can be omitted, so "YYYY" and
              "YYYY:MM:DD HH:MM" are also valid date formats.
 
-           * started_after: The execution started running after
-             'started_after'.  The format is identical to
-             'started_before'.
+           * ``started_after``: The execution started running after
+             ``started_after``.  The format is identical to
+             ``started_before``.
 
-           * ended_before: The execution finished running before
-             'ended_before'.  The format is the same as for
-             'started_before'.
+           * ``ended_before``: The execution finished running before
+             ``ended_before``.  The format is the same as for
+             ``started_before``.
 
-           * ended_after: The execution finished running after
-             'ended_after'.  The format is the same as for
-             'started_before'.
+           * ``ended_after``: The execution finished running after
+             ``ended_after``.  The format is the same as for
+             ``started_before``.
         """
         with_text = with_text != None and '%'+with_text+'%' or None
         sql = """select id from execution where 
@@ -967,11 +980,11 @@ class MiniLIMS(object):
             raise ValueError("No such execution id " + str(execution_id))
 
     def import_file(self, src, description=""):
-        """Add an external file 'src' to the MiniLIMS repository.
+        """Add an external file ``src`` to the MiniLIMS repository.
 
-        'src' should be the path to the file to be added.
-        'description' is an optional string that will be attached to
-        the file in the repository.  import_file returns the file id
+        ``src`` should be the path to the file to be added.
+        ``description`` is an optional string that will be attached to
+        the file in the repository.  ``import_file`` returns the file id
         in the repository of the newly imported file.
         """
         self.db.execute("""insert into file(external_name,repository_name,
@@ -984,9 +997,9 @@ class MiniLIMS(object):
                 self.db.execute("""select last_insert_rowid()""")][0]
         
     def export_file(self, file_or_alias, dst):
-        """Write fileid from the MiniLIMS repository to dst.
+        """Write ``fileid`` from the MiniLIMS repository to ``dst``.
 
-        dst can be either a directory, in which case the file will
+        ``dst`` can be either a directory, in which case the file will
         have its repository name in the new directory, or can specify
         a filename, in which case the file will be copied to that
         filename.
@@ -1010,7 +1023,7 @@ class MiniLIMS(object):
     def resolve_alias(self, alias):
         """Resolve an alias to an integer file id.
 
-        If an integer is passed to resolve_alias, it is returned as is,
+        If an integer is passed to ``resolve_alias``, it is returned as is,
         so this method can be used without worry any time any alias
         might have to be resolved.        
         """
@@ -1024,17 +1037,17 @@ class MiniLIMS(object):
                 return x[0]
 
     def add_alias(self, fileid, alias):
-        """Make the string 'alias' an alias for fileid in the repository.
+        """Make the string ``alias`` an alias for ``fileid`` in the repository.
 
-        An alias can be used in place of an integer file id in 
-        all methods that take a file id.
+        An alias can be used in place of an integer file ID in 
+        all methods that take a file ID.
         """
         self.db.execute("""insert into file_alias(alias,file) values (?,?)""",
                         (alias, self.resolve_alias(fileid)))
         self.db.commit()
 
     def delete_alias(self, alias):
-        """Delete the file alias 'alias' from the repository.
+        """Delete the file alias ``alias`` from the repository.
 
         The file itself is untouched.  This only affects the alias.
         """
@@ -1042,24 +1055,24 @@ class MiniLIMS(object):
         self.db.commit()
 
     def associated_files_of(self, file_or_alias):
-        """Find all files associated to 'file_or_alias'.
+        """Find all files associated to ``file_or_alias``.
 
-        Return a list of (fileid, template) of all files associated 
-        to 'file_or_alias'.
+        Return a list of ``(fileid, template)`` of all files associated 
+        to ``file_or_alias``.
         """
         f = self.resolve_alias(file_or_alias)
         return self.db.execute("""select fileid,template from file_association where associated_to = ?""", (f,)).fetchall()
 
     def associate_file(self, file_or_alias, associate_to, template):
-        """Add a file association from 'file_or_alias' to 'associate_to'.
+        """Add a file association from ``file_or_alias`` to ``associate_to``.
 
-        When the file 'associate_to' is used in an execution, 
-        'file_or_alias' is also used, and named according to 'template'. 
-        'template' should be a string containing %s, which will be
-        replaced with the name 'associate_to' is copied to.  So if
-        'associate_to' is copied to X in the working directory, and
-        the template is "%s.idx", then 'file_or_alias' is also copied 
-        to X.idx.
+        When the file ``associate_to`` is used in an execution, 
+        ``file_or_alias`` is also used, and named according to ``template``. 
+        ``template`` should be a string containing ``%s``, which will be
+        replaced with the name ``associate_to`` is copied to.  So if
+        ``associate_to`` is copied to *X* in the working directory, and
+        the template is ``"%s.idx"``, then `file_or_alias` is copied 
+        to *X*``.idx``.
         """
         src = self.resolve_alias(file_or_alias)
         dst = self.resolve_alias(associate_to)
@@ -1070,7 +1083,7 @@ class MiniLIMS(object):
             self.db.commit()
             
     def delete_file_association(self, file_or_alias, associated_to):
-        """Remove the file association from 'file_or_alias' to 'associated_to'.
+        """Remove the file association from ``file_or_alias`` to ``associated_to``.
 
         Both fields can be either an integer or an alias string.
         """
