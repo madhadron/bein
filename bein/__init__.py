@@ -183,7 +183,7 @@ class program(object):
         d = self.gen_args(*args, **kwargs)
         sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE,
-                              cwd = ex.exwd)
+                              cwd = ex.working_directory)
         return_code = sp.wait()
         po = ProgramOutput(return_code, sp.pid,
                                 d["arguments"], 
@@ -236,7 +236,7 @@ class program(object):
         def g():
             sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
-                                  cwd = ex.exwd)
+                                  cwd = ex.working_directory)
             return_code = sp.wait()
             f.program_output = ProgramOutput(return_code, sp.pid,
                                              d["arguments"], 
@@ -264,9 +264,9 @@ class program(object):
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args, **kwargs)
-        stdout_filename = unique_filename_in(ex.exwd)
-        stderr_filename = unique_filename_in(ex.exwd)
-        cmds = ["bsub","-cwd",ex.exwd,"-o",stdout_filename,"-e",stderr_filename,
+        stdout_filename = unique_filename_in(ex.working_directory)
+        stderr_filename = unique_filename_in(ex.working_directory)
+        cmds = ["bsub","-cwd",ex.working_directory,"-o",stdout_filename,"-e",stderr_filename,
                 "-K","-r"] + d["arguments"]
         class Future(object):
             def __init__(self):
@@ -283,11 +283,11 @@ class program(object):
             return_code = sp.wait()
             stdout = None
             stderr = None
-            while not(os.path.exists(os.path.join(ex.exwd, stdout_filename))):
+            while not(os.path.exists(os.path.join(ex.working_directory, stdout_filename))):
                 pass # We need to wait until the files actually show up
-            with open(os.path.join(ex.exwd,stdout_filename), 'r') as fo:
+            with open(os.path.join(ex.working_directory,stdout_filename), 'r') as fo:
                 stdout = fo.readlines()
-            with open(os.path.join(ex.exwd,stderr_filename), 'r') as fe:
+            with open(os.path.join(ex.working_directory,stderr_filename), 'r') as fe:
                 stderr = fe.readlines()
             f.program_output = ProgramOutput(return_code, sp.pid,
                                              cmds, stdout, stderr)
@@ -319,9 +319,9 @@ class Execution(object):
     'use' fetches a file from the LIMS repository into the working
     directory.
     """
-    def __init__(self, lims, exwd):
+    def __init__(self, lims, working_directory):
         self.lims = lims
-        self.exwd = exwd
+        self.working_directory = working_directory
         self.programs = []
         self.files = []
         self.used_files = []
@@ -375,10 +375,10 @@ class Execution(object):
         try:
             filename = [x for (x,) in 
                         self.lims.db.execute("select exportfile(?,?)", 
-                                             (fileid, self.exwd))][0]
+                                             (fileid, self.working_directory))][0]
             for (f,t) in self.lims.associated_files_of(fileid):
                 self.lims.db.execute("select exportfile(?,?)",
-                                     (f, os.path.join(self.exwd,t % filename)))
+                                     (f, os.path.join(self.working_directory,t % filename)))
             self.used_files.append(fileid)
             return filename
         except ValueError, v:
@@ -414,7 +414,7 @@ def execution(lims = None, description=""):
         ex.finish()
         if lims != None:
             lims.write(ex, description, exception_string)
-        shutil.rmtree(ex.exwd, ignore_errors=True)
+        shutil.rmtree(ex.working_directory, ignore_errors=True)
         os.chdir("..")
 
 class MiniLIMS(object):
@@ -698,7 +698,7 @@ class MiniLIMS(object):
                                               working_directory,description,
                                               exception) 
                         values (?,?,?,?,?)""",
-                        (ex.started_at, ex.finished_at, ex.exwd, description,
+                        (ex.started_at, ex.finished_at, ex.working_directory, description,
                          exception_string))
         [exid] = [x for (x,) in self.db.execute("select last_insert_rowid()")]
         for i,p in enumerate(ex.programs):
@@ -711,7 +711,7 @@ class MiniLIMS(object):
         fileids = {}
         for (filename,description,associate_to_id,associate_to_filename,template,alias) in ex.files:
             self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value) values (?,importfile(?),?,?,?)""",
-                            (filename,os.path.abspath(os.path.join(ex.exwd,filename)),
+                            (filename,os.path.abspath(os.path.join(ex.working_directory,filename)),
                              description,'execution',exid))
             fileids[filename] = self.db.execute("""select last_insert_rowid()""").fetchone()[0]
             if alias != None:
