@@ -3,22 +3,16 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to bein's documentation!
-================================
-
-Contents:
+bein 0.91 documentation
+=======================
 
 .. toctree::
-   :maxdepth: 2
+   :max-depth: 2
 
-.. automodule:: bein
-   :members:
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
+* :doc:`tutorial`
+* :doc:`advanced_bein`
+* :doc:`faq`
+* :doc:`essay`
 * :ref:`modindex`
-* :ref:`search`
+* :ref:`genindex`
 

@@ -15,7 +15,11 @@
 
 # You should have received a copy of the GNU General Public License
 # along with bein.  If not, see <http://www.gnu.org/licenses/>.
-"""Bein - LIMS and workflow manager for bioinformatics
+"""
+:mod:`bein` -- Core functionality
+=================================
+
+Bein - LIMS and workflow manager for bioinformatics
 by Frederick Ross <madhadron@gmail.com>
 
 Bein contains a miniature LIMS (Laboratory Information Management
@@ -162,6 +166,8 @@ class program(object):
     """
     def __init__(self, gen_args):
         self.gen_args = gen_args
+        self.__doc__ = gen_args.__doc__
+        self.__name__ = gen_args.__name__
 
     def __call__(self, ex, *args, **kwargs):
         """Run a program locally, and block until it completes.
