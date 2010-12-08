@@ -10,7 +10,7 @@ The venerable Unix shell represents one solution.  It has persisted for forty ye
 
 An identical problem afflicts scientists and engineers.  They often have several sets of data from identical experiments, and suffer the same problems as programmers with multiple versions of source code.  This problem has been solved before, starting with the Discovery Net system from Imperial College London and continuing through modern systems like Galaxy.  These all suffer from one crucial problem which is best illustrated by a quote from Galaxy's website: "Stop wasting time writing interfaces and get your tools used by biologists!"  These systems turn mature, stable workflows into black boxes usable by a layman.  For a mass spectrometry or sequencing center which needs to process and track all the data it produces before turning it over to their customers, these are perfect, but they are little help for the working scientist who is still exploring.
 
-There has been nothing inbetween, no equivalent of ``git`` and ``make`` for the working scientist.  Bein fills that gap.
+There has been nothing in between, no equivalent of ``git`` and ``make`` for the working scientist.  Bein fills that gap.
 
 Bein is tiny.  It's under 1000 lines of code, and the core logic is under 500.  It is the result of a year of writing, testing, and rewriting to make a tool for the day to day work in the Bioinformatics and Biostatistics Core Facility of the Ecole Polytechnique Federale de Lausanne.
 
@@ -185,28 +185,173 @@ Don't be afraid to use the Delete button.  You will create many executions which
 Using the MiniLIMS outside executions
 -------------------------------------
 
-beinclient open all the time is normal.
+The MiniLIMS provides several methods which are useful outside of executions, or in executions attached to a different MiniLIMS object.  ``import_file`` and ``export_file`` let you manually put files into and get them out of the repository.  Exporting the file with numeric ID 2 from the repository entails::
 
-Can also work with a MiniLIMS directly: import_file, export_file, copy_file, resolve_path (this is useful if accessing a second MiniLIMS for some files).
+    M = MiniLIMS("data")
+    M.export_file(2, "/path/to/export/to")
+
+If ``/path/to/export/to`` points to a directory, the file is copied there with its repository name.  If it is filename in a directory, then the file is copied to that filename.  This mirrors the semantics of the Unix ``cp`` command.
+
+``import_file`` manually adds a file to the MiniLIMS repository, and returns the numeric ID assigned to the file, as in::
+
+    M = MiniLIMS("data")
+    fileid = M.import_file("/path/to/file")
+
+If we import ``test.py`` this way, and look at it in ``beinclient``, we see that bein also tracks whether a file was imported or not.
+
+.. image:: imported_file.png
+
+If a group of people are working on similar problems, they may share a MiniLIMS repository with common reference files.  They could certainly export from this repository into their working directory, but for large files that are only read, this wastes a lot of time and space copying them.
+
+Bein provides a method ``path_to_file`` to get the full path of a file in a MiniLIMS repository.  For instance, if a user needed to read from, but not write to, the file with ID 12 in the shared repository for his own execution, he might write something like::
+
+    from bein import *
+
+    M = MiniLIMS("/path/to/my/repository")
+    sharedM = MiniLIMS("/path/to/shared/repository")
+
+    with execution(M) as ex:
+        shared_file = sharedM.path_to_file(12)
+        ...
+
+MiniLIMS provides a number of other useful methods as well.  In particular, you can delete files and executions, fetch dictionaries with all the information corresponding to a particular file or execution, and search for files and executions by content.
+
+.. class:: bein.MiniLIMS
+
+  .. automethod:: delete_file(file_id)
+
+  .. automethod:: delete_execution
+
+  .. automethod:: fetch_file(file_id)
+
+  .. automethod:: fetch_execution(execution_id)
+
+  .. automethod:: search_files
+
+  .. automethod:: search_executions
 
 Binding programs into bein
 --------------------------
 
-How touch is bound.  @program decorator and return values.  Do it without a default for the argument.
+In the simple workflow we gave near the beginning of this tutorial, we called a program ``touch`` from ``bein.util``.  How do we write such external bindings?  To begin with an example, here is a binding for ``touch``::
 
-@program magic: adds the ex argument, adds auto reporting for the execution, etc.
+    @program
+    def touch(filename):
+        return {'arguments': ['touch', filename],
+                'return_value': filename}
 
-Can also define a function to do the return.  Show example as wc -l.
+The function itself is quite simple.  It takes some arguments, and returns a dictionary containing two keys ``'arguments'`` and ``'return_value'``.  The ``@program`` decorator takes such a function and performs some magic behind the scenes to produce a full program binding for bein.
+
+The value corresponding to ``'arguments'`` is a list of strings which give the external program to run and the arguments to pass to it.  ``['touch', 'abcd']`` is equivalent to running ``touch abcd`` in the Unix shell.
+
+In an execution, if a program exits with return value 0, then the value corresponding to ``'return_value'`` is returned by the function and the execution continues.  If the program exits with another value, the execution terminates and the failure is written to the MiniLIMS.
+
+The binding above is enough to run our basic workflow.  We can remove import of ``bein.util`` and run the script::
+
+    from bein import *
+
+    @program
+    def touch(filename):
+        return {'arguments': ['touch', filename],
+                'return_value': filename}
+
+    M = MiniLIMS("data")
+
+    with execution(M) as ex:
+        touch(ex, "boris")
+        print ex.working_directory
+
+Observant readers will have remarked that we defined ``touch`` to take only one argument, but in the execution we give it two.  This is part of the magic performed by ``@program``.  It adds an extra, initial argument to the function which should be the execution the program is running in.
+
+One of the most common errors when writing bein scripts is to forget to pass the execution to a bound program.  Don't worry if you do.  Bein will tell you so explicitly.  If we omit the ``ex`` in ``touch`` above, the script fails with the error ``ValueError: First argument to program touch must be an Execution.``
+
+In ``touch`` we know the sensible return value before we run the program.  What do we do if we are running the program to find that value?  For instance, we might run ``wc -l`` to find the number of lines in a file.  The return value when we bind this program should be the number of lines, but we don't know it beforehand.
+
+The value corresponding to ``'return_value'`` need not be a value.  It may be a function.  If it is, then when the program has finished running, the function is called on its results.  The results are passed to the function as a ``ProgramObject``.
+
+.. autoclass:: bein.ProgramOutput
+
+  .. attribute:: return_code
+
+    An integer giving the return code of the program when it exited.  By convention this is 0 if the program succeeded, or some other value if it failed.
+
+  .. attribute:: pid
+
+    An integer giving the process ID under which the program ran.
+
+  .. attribute:: arguments
+
+    A list of strings which were the program and the exact arguments passed to it.
+
+  .. attribute:: stdout
+
+    The text printed by the program to ``stdout``.  It is returned as a list of strings, each corresponding to one line of ``stdout``, and each still carrying their terminal ``\n``.
+
+  .. attribute:: stderr
+
+    The text printed by the program to ``stderr``.  It has the same format as ``stdout``.
+
+Let's bind ``wc -l`` as we discussed above.  The output of ``wc -l`` is a line containing the number of lines followed by the filename, so we will define a function to extract the number of lines with a regular expression::
+
+    @program
+    def count_lines(filename):
+       def parse_output(p):
+            m = re.search(r'^\s+(\d+)\s+' + filename, ''.join(p.stdout))
+            return int(m.groups()[0])
+       return {'arguments': ["wc","-l",filename],
+               'return_value': parse_output}
 
 
-Thus it's trivial to bind your own scripts in other languages.  Show binding an R script that calculates the mean of the numbers passed on its command line and prints it.
+``parse_output`` takes a program object ``p``.  We join the lines in ``p`` (there is only one, actually), do a regular expression search for the field we want, and return it as an integer.
+
+Binding programs in this way makes it trivial to bind scripts in other languages.  For instance, if we have an R script ``mean.R`` that calculates the mean of the numbers passed on its command line::
+
+    values <- as.numeric(commandArgs(trailingOnly = TRUE))
+    cat(mean(values), '\n')
+
+We can bind it into bein with::
+
+    @program
+    def mean_R(numbers):
+        def read_mean(p):
+            return int("".join(p.stdout))
+        return {'arguments': ["R","--vanilla","--slave","-f","/path/to/mean.R",
+                              "--args"] + [str(n) for n in numbers],
+                'return_value': mean_R}
+
+There are two common idioms here worth noting.  First, if you have to pass multiple arguments, append it to the list of other arguments.  Second, you must make sure your arguments are strings.  If you had written ``..."--args"] + numbers`` it would have failed because the ``numbers`` contains integers, not strings.
+
+There is more advice on how to bind programs in the :doc:`advanced_bein` manual, but the best way to learn good practice is to read the source code of existing bindings in :mod:`bein.util`.
 
 What happens when things fail
 -----------------------------
 
+Bein is robust.  You don't have to worry about your programs failing.  It will record the failure, clean up, and carry on.  For instance, this script will fail::
+
+    from bein import *
+    from bein.util import *
+
+    M = MiniLIMS("data")
+
+    with execution(M) as ex:
+        touch(ex, "boris")
+        print count_lines(ex, "borsi")
+
+When we run it, we get the error::
+
+    bein.ProgramFailed: Running 'wc -l borsi' failed with stderr:
+        wc: borsi: open: No such file or directory
+
+Of course, we misspelled ``boris``.  No harm done.  Fix it and run it again.  If we lose the error before we fix it, there's no problem.  It's displayed in ``beinclient`` as well.
+
+.. image:: failed_execution.png
+
 Do something with the touched boris file, but misspell it.  Show error message, show that it's all properly recorded in bein and cleaned up.  Don't be afraid of failure.
 
-One of the most common mistakes: omit an execution argument to a function, and show that bein gives good error message.
+Certain errors show up all the time.  Check for them first:
 
-As a matter of course, you'll probably want to delete failures as you go along and debug.  There's no reason to keep them and they clog up the beinclient interface.
+* Did you forget to pass the execution as the first argument to a bound function?
+* Did you convert all of the arguments to a bound program to strings?
+* Did you misspell a filename?
 
+From here, you should go read the advice in :doc:`advanced_bein`, which covers the more advanced features of the system and some useful things you probably hadn't thought of doing with it.

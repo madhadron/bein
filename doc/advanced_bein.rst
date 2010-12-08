@@ -1,6 +1,14 @@
 Advanced techniques in bein
 ===========================
 
+After you have read the :doc:`tutorial` and played with bein a bit,
+you're ready to learn about the rest of its features and the best way
+to use the system.
+
+After you have absorbed what's in this page, you should go browse
+:mod:`bein.util` to learn what is available and to get ideas for good
+practices in your own code.
+
 File aliases
 ------------
 
