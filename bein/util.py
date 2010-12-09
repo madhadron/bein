@@ -15,7 +15,20 @@
 
 # You should have received a copy of the GNU General Public License
 # along with bein.  If not, see <http://www.gnu.org/licenses/>.
+"""
+:mod:`bein.util` -- Library of functions for bein
+=================================================
 
+.. module:: bein.util
+   :platform: Unix
+   :synopsis: Useful programs and utilities for bein
+.. moduleauthor:: Fred Ross <madhadron at gmail dot com>
+
+This module is a repository of assorted robust functions that have
+been developed for bein in day to day use.  Much of it is focused on
+analysis of high throughput sequencing data, but if you have useful
+functions for a different domain, please contribute them.
+"""
 
 from contextlib import contextmanager
 import pickle
@@ -36,9 +49,9 @@ def pause():
 
 @program
 def touch(filename = None):
-    """Equivalent to shell: touch 'filename'
+    """Equivalent to shell: ``touch filename``
 
-    Returns 'filename'.  If filename is omitted, 'filename' is set to
+    Returns *filename*.  If filename is ``None``, *filename* is set to
     a unique, random name.
     """
     if filename == None:
@@ -49,17 +62,14 @@ def touch(filename = None):
 
 @program
 def sleep(n):
-    """Sleep for 'n' seconds.  Returns 'n'."""
+    """Sleep for *n* seconds.  Returns *n*."""
     return {"arguments": ["sleep", str(n)],
             "return_value": n}
 
 
 @program
 def count_lines(filename):
-    """Count the number of lines in 'filename'.
-
-    count_lines is a wrapper around 'wc -l'.
-    """
+    """Count the number of lines in *filename* (equivalent to ``wc -l``)."""
     def parse_output(p):
         m = re.search(r'^\s+(\d+)\s+' + filename,
                       ''.join(p.stdout))
@@ -70,13 +80,13 @@ def count_lines(filename):
 
 @program
 def split_file(filename, n_lines = 1000, prefix = None, suffix_length = 3):
-    """Equivalent to unix command split.
+    """Equivalent to Unix command ``split``.
 
-    'filename' is the file to split.  Returns a list of the names of
-    the new files created.  'n_lines' is the number of lines to put in
-    each file, 'prefix' is the file prefix to use (which is set to a
+    *filename* is the file to split.  Returns a list of the names of
+    the new files created.  *n_lines* is the number of lines to put in
+    each file, *prefix* is the file prefix to use (which is set to a
     unique, randomly chosen string if not specified), and
-    'suffix_length' is the number of positions to use after the prefix
+    *suffix_length* is the number of positions to use after the prefix
     to label the files.
     """
     if prefix == None:
@@ -95,9 +105,9 @@ def split_file(filename, n_lines = 1000, prefix = None, suffix_length = 3):
 
 @program
 def bowtie(index, reads, args="-Sra"):
-    """Run bowtie with 'args' to map 'reads' against 'index'.
+    """Run bowtie with *args* to map *reads* against *index*.
 
-    Returns the filename of bowtie's output file.  'args' gives the
+    Returns the filename of bowtie's output file.  *args* gives the
     command line arguments to bowtie, and may be either a string or a
     list of strings.
     """
@@ -117,9 +127,9 @@ def bowtie(index, reads, args="-Sra"):
 
 @program
 def bowtie_build(files, index = None):
-    """Created a bowtie index from 'files'.
+    """Created a bowtie index from *files*.
 
-    'files' can be a string giving the name of a FASTA file, or a list
+    *files* can be a string giving the name of a FASTA file, or a list
     of strings giving the names of several FASTA files.  The prefix of
     the resulting bowtie index is returned.
     """
@@ -132,16 +142,16 @@ def bowtie_build(files, index = None):
 
 
 def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
-    """Run bowtie in parallel on pieces of 'reads'.
+    """Run bowtie in parallel on pieces of *reads*.
 
-    Splits 'reads' into chunks 'n_lines' long, then runs bowtie with
-    arguments 'bowtie_args' to map each chunk against 'index'.  One of
+    Splits *reads* into chunks *n_lines* long, then runs bowtie with
+    arguments *bowtie_args* to map each chunk against *index*.  One of
     the arguments needs to be -S so the output takes the form of SAM
     files, because the results are converted to BAM and merged.  The
     filename of the single, merged BAM file is returned.
 
     Bowtie does not set the NH flag on its SAM file output.  If the
-    ``add_nh_flags`` argument is ``True``, this function calculates
+    *add_nh_flags* argument is ``True``, this function calculates
     and adds the flag before merging the BAM files.
     """
     subfiles = split_file(ex, reads, n_lines = n_lines)
@@ -171,12 +181,12 @@ def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra",
 ###############
 @program
 def sam_to_bam(sam_filename):
-    """Convert 'sam_filename' to a BAM file.
+    """Convert *sam_filename* to a BAM file.
 
-    'sam_filename' must obviously be the filename of a SAM file.
+    *sam_filename* must obviously be the filename of a SAM file.
     Returns the filename of the created BAM file.
 
-    Equivalent: samtools view -b -S -o ...
+    Equivalent: ``samtools view -b -S -o ...``
     """
     bam_filename = unique_filename_in()
     return {"arguments": ["samtools","view","-b","-S","-o",
@@ -185,11 +195,11 @@ def sam_to_bam(sam_filename):
 
 @program
 def sort_bam(bamfile):
-    """Sort a BAM file 'bamfile'.
+    """Sort a BAM file *bamfile*.
 
     Returns the filename of the newly created, sorted BAM file.
 
-    Equivalent: samtools sort ...
+    Equivalent: ``samtools sort ...``
     """
     filename = unique_filename_in()
     return {'arguments': ['samtools','sort',bamfile,filename],
@@ -200,11 +210,11 @@ def sort_bam(bamfile):
 def index_bam(bamfile):
     """Index a sorted BAM file.
 
-    Returns the filename in 'bamfile' with '.bai' appended, that is,
-    the filename of the newly created index.  'bamfile' must be sorted
+    Returns the filename in *bamfile* with ``.bai`` appended, that is,
+    the filename of the newly created index.  *bamfile* must be sorted
     for this to work.
 
-    Equivalent: samtools index ...
+    Equivalent: ``samtools index ...``
     """
     return {'arguments': ['samtools','index',bamfile],
             'return_value': bamfile + '.bai'}
@@ -214,7 +224,7 @@ def index_bam(bamfile):
 def merge_bam(files):
     """Merge a list of BAM files.
 
-    'files' should be a list of filenames of BAM files.  They are
+    *files* should be a list of filenames of BAM files.  They are
     merged into a single BAM file, and the filename of that new file
     is returned.
     """
@@ -223,7 +233,7 @@ def merge_bam(files):
             'return_value': filename}
 
 def split_by_readname(samfile):
-    """Return an iterator over a samfiles reads grouped by read name.
+    """Return an iterator over the reads in *samfile* grouped by read name.
 
     The SAM file produced by bowtie is sorted by read name.  Often we
     want to work with all of the alignments of a particular read at
@@ -241,7 +251,7 @@ def split_by_readname(samfile):
             accum.append(r)
 
 def add_nh_flag(samfile):
-    """Adds NH (Number of Hits) flag to each read alignment.
+    """Adds NH (Number of Hits) flag to each read alignment in *samfile*.
     
     Scans a TAM file ordered by read name, counts the number of
     alternative alignments reported and writes them to a BAM file
@@ -264,25 +274,25 @@ def add_nh_flag(samfile):
 # Adding special file types
 
 
-def add_pickle(ex, val, description=""):
-    """Pickle 'val', and add it to the repository.
+def add_pickle(execution, val, description=""):
+    """Pickle *val*, and add it to the repository.
 
     add_pickle lets you dump almost any Python value to a file in the
     MiniLIMS repository.  It is useful to keep track of intermediate
-    calculations.  'description' will be set as the pickle file's
+    calculations.  *description* will be set as the pickle file's
     description.
     """
     filename = unique_filename_in()
     with open(filename, 'wb') as f:
         pickle.dump(val, f)
-    ex.add(filename, description)
+    execution.add(filename, description)
 
 
 @contextmanager
 def add_figure(ex, figure_type='eps', description=""):
     """Create a matplotlib figure and write it to the repository.
 
-    Use this as a with statement, for instance:
+    Use this as a with statement, for instance::
 
         with add_figure(ex, 'eps') as fig:
             hist(a)
@@ -299,9 +309,9 @@ def add_figure(ex, figure_type='eps', description=""):
 
 
 def add_and_index_bam(ex, bamfile, description=""):
-    """Indexes 'bamfile' and adds it to the repository.
+    """Indexes *bamfile* and adds it to the repository.
 
-    The index created is properly associated to 'bamfile' in the
+    The index created is properly associated to *bamfile* in the
     repository, so when you use the BAM file later, the index will
     also be copied into place with the correct name.
     """
@@ -313,26 +323,26 @@ def add_and_index_bam(ex, bamfile, description=""):
     return fileid
 
 
-def add_bowtie_index(ex, files, description="", alias=None, index=None):
+def add_bowtie_index(execution, files, description="", alias=None, index=None):
     """Adds an index of a list of FASTA files to the repository.
 
-    'files' is a list of filenames of FASTA files.  The files are
+    *files* is a list of filenames of FASTA files.  The files are
     indexed with bowtie-build, then a placeholder is written to the
     repository, and the six files of the bowtie index are associated
     to it.  Using the placeholder in an execution will properly set up
     the whole index.
 
-    'alias' is an optional alias to give to the whole index so it may
-    be referred to by name in future.  'index' lets you set the actual
+    *alias* is an optional alias to give to the whole index so it may
+    be referred to by name in future.  *index* lets you set the actual
     name of the index created.
     """
-    index = bowtie_build(ex, files, index=index)
+    index = bowtie_build(execution, files, index=index)
     touch(ex, index)
-    ex.add(index, description=description, alias=alias)
-    ex.add(index + ".1.ebwt", associate_to_filename=index, template='%s.1.ebwt')
-    ex.add(index + ".2.ebwt", associate_to_filename=index, template='%s.2.ebwt')
-    ex.add(index + ".3.ebwt", associate_to_filename=index, template='%s.3.ebwt')
-    ex.add(index + ".4.ebwt", associate_to_filename=index, template='%s.4.ebwt')
-    ex.add(index + ".rev.1.ebwt", associate_to_filename=index, template='%s.rev.1.ebwt')
-    ex.add(index + ".rev.2.ebwt", associate_to_filename=index, template='%s.rev.2.ebwt')
+    execution.add(index, description=description, alias=alias)
+    execution.add(index + ".1.ebwt", associate_to_filename=index, template='%s.1.ebwt')
+    execution.add(index + ".2.ebwt", associate_to_filename=index, template='%s.2.ebwt')
+    execution.add(index + ".3.ebwt", associate_to_filename=index, template='%s.3.ebwt')
+    execution.add(index + ".4.ebwt", associate_to_filename=index, template='%s.4.ebwt')
+    execution.add(index + ".rev.1.ebwt", associate_to_filename=index, template='%s.rev.1.ebwt')
+    execution.add(index + ".rev.2.ebwt", associate_to_filename=index, template='%s.rev.2.ebwt')
     return index
