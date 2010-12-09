@@ -162,7 +162,7 @@ def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add
     else:
         futures = [sam_to_bam.nonblocking(ex, sf) for sf in samfiles]
         bamfiles = [f.wait() for f in futures]
-    return merge_bamfiles.nonblocking(ex, bamfiles).wait()
+    return merge_bam.nonblocking(ex, bamfiles).wait()
 
 def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
     """Identical to parallel_bowtie, but runs programs via LSF."""
