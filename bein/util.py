@@ -307,7 +307,6 @@ def add_figure(ex, figure_type='eps', description="", alias=None):
     filename = unique_filename_in() + '.' + figure_type
     f.savefig(filename)
     ex.add(filename, description=description, alias=alias)
-    return filename
 
 
 def add_and_index_bam(ex, bamfile, description="", alias=None):
