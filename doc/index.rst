@@ -3,11 +3,11 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-bein 0.91 documentation
+bein 0.95 documentation
 =======================
 
 .. toctree::
-   :max-depth: 2
+   :max-depth: 3
 
 * :doc:`tutorial`
 * :doc:`advanced_bein`

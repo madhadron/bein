@@ -1,4 +1,4 @@
-bein 1.0
+bein 0.95 
 Copyright 2010 Frederick Ross <madhadron at gmail dot com>
 
 Bein is a workflow manager and miniature LIMS system built in the
@@ -40,5 +40,13 @@ SyBit (http://www.systemsx.ch/projects/systemsxch-projects/sybit/).
 Changelog
 ---------
 
-1.0:
-    * First stable release of bein.
+0.95:
+    * First stable release of bein, with a manual.
+
+
+Features to add someday
+-----------------------
+
+* A MiniLIMS based on PostgreSQL for scaling up MiniLIMS repositories.
+* A fancier MiniLIMS client.
+* Refactor bein.util into submodules based on domain.
