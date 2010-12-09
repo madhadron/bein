@@ -230,6 +230,8 @@ MiniLIMS provides a number of other useful methods as well.  In particular, you 
 
   .. automethod:: search_executions
 
+.. _program-binding:
+
 Binding programs into bein
 --------------------------
 

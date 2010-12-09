@@ -92,7 +92,7 @@ def unique_filename_in(path=None):
     """Return a random filename unique in the given path.
 
     The filename returned is twenty alphanumeric characters which are
-    not already serving as a filename in ``path``.  If ``path`` is
+    not already serving as a filename in *path*.  If *path* is
     omitted, it defaults to the current working directory.
     """
     if path == None:
@@ -742,18 +742,18 @@ class MiniLIMS(object):
         Finds files which satisfy all the criteria which are not None.
         The criteria are:
 
-           * ``with_text``: The file's external_name or description
-             contains ``with_text``
+           * *with_text*: The file's external_name or description
+             contains *with_text*
 
-           * ``older_than``: The file's created time is earlier than
-             ``older_than``.  This should be of the form "YYYY:MM:DD
+           * *older_than*: The file's created time is earlier than
+             *older_than*.  This should be of the form "YYYY:MM:DD
              HH:MM:SS".  Final fields can be omitted, so "YYYY" and
              "YYYY:MM:DD HH:MM" are also valid date formats.
 
-           * ``newer_than``: The file's created time is later than
-             ``newer_then``, using the same format as ``older_than``.
+           * *newer_than*: The file's created time is later than
+             *newer_then*, using the same format as *older_than*.
 
-           * ``source``: Where the file came from.  Can be one of
+           * *source*: Where the file came from.  Can be one of
              ``'execution'``, ``'copy'``, ``'import'``,
              ``('execution',exid)``, or ``('copy',srcid)``, where
              ``exid`` is the numeric ID of the execution that created
@@ -783,25 +783,25 @@ class MiniLIMS(object):
         Returns a list of execution ids of executions which satisfy
         all the criteria which are not None.  The criteria are:
 
-           * ``with_text``: The execution's description or one of the
-             program arguments in the execution contains ``with_text``.
+           * *with_text*: The execution's description or one of the
+             program arguments in the execution contains *with_text*.
 
-           * ``started_before``: The execution started running before
-             ``start_before``.  This should be of the form "YYYY:MM:DD
+           * *started_before*: The execution started running before
+             *start_before*.  This should be of the form "YYYY:MM:DD
              HH:MM:SS".  Final fields can be omitted, so "YYYY" and
              "YYYY:MM:DD HH:MM" are also valid date formats.
 
-           * ``started_after``: The execution started running after
-             ``started_after``.  The format is identical to
-             ``started_before``.
+           * *started_after*: The execution started running after
+             *started_after*.  The format is identical to
+             *started_before*.
 
-           * ``ended_before``: The execution finished running before
-             ``ended_before``.  The format is the same as for
-             ``started_before``.
+           * *ended_before*: The execution finished running before
+             *ended_before*.  The format is the same as for
+             *started_before*.
 
-           * ``ended_after``: The execution finished running after
-             ``ended_after``.  The format is the same as for
-             ``started_before``.
+           * *ended_after*: The execution finished running after
+             *ended_after*.  The format is the same as for
+             *started_before*.
         """
         with_text = with_text != None and '%'+with_text+'%' or None
         sql = """select id from execution where 
@@ -980,10 +980,10 @@ class MiniLIMS(object):
             raise ValueError("No such execution id " + str(execution_id))
 
     def import_file(self, src, description=""):
-        """Add an external file ``src`` to the MiniLIMS repository.
+        """Add an external file *src* to the MiniLIMS repository.
 
-        ``src`` should be the path to the file to be added.
-        ``description`` is an optional string that will be attached to
+        *src* should be the path to the file to be added.
+        *description* is an optional string that will be attached to
         the file in the repository.  ``import_file`` returns the file id
         in the repository of the newly imported file.
         """
@@ -997,9 +997,9 @@ class MiniLIMS(object):
                 self.db.execute("""select last_insert_rowid()""")][0]
         
     def export_file(self, file_or_alias, dst):
-        """Write ``fileid`` from the MiniLIMS repository to ``dst``.
+        """Write *file_or_alias* from the MiniLIMS repository to *dst*.
 
-        ``dst`` can be either a directory, in which case the file will
+        *dst* can be either a directory, in which case the file will
         have its repository name in the new directory, or can specify
         a filename, in which case the file will be copied to that
         filename.
@@ -1037,7 +1037,7 @@ class MiniLIMS(object):
                 return x[0]
 
     def add_alias(self, fileid, alias):
-        """Make the string ``alias`` an alias for ``fileid`` in the repository.
+        """Make the string *alias* an alias for *fileid* in the repository.
 
         An alias can be used in place of an integer file ID in 
         all methods that take a file ID.
@@ -1047,7 +1047,7 @@ class MiniLIMS(object):
         self.db.commit()
 
     def delete_alias(self, alias):
-        """Delete the file alias ``alias`` from the repository.
+        """Delete the alias *alias* from the repository.
 
         The file itself is untouched.  This only affects the alias.
         """
@@ -1055,22 +1055,22 @@ class MiniLIMS(object):
         self.db.commit()
 
     def associated_files_of(self, file_or_alias):
-        """Find all files associated to ``file_or_alias``.
+        """Find all files associated to *file_or_alias*.
 
         Return a list of ``(fileid, template)`` of all files associated 
-        to ``file_or_alias``.
+        to *file_or_alias*.
         """
         f = self.resolve_alias(file_or_alias)
         return self.db.execute("""select fileid,template from file_association where associated_to = ?""", (f,)).fetchall()
 
     def associate_file(self, file_or_alias, associate_to, template):
-        """Add a file association from ``file_or_alias`` to ``associate_to``.
+        """Add a file association from *file_or_alias* to *associate_to*.
 
-        When the file ``associate_to`` is used in an execution, 
-        ``file_or_alias`` is also used, and named according to ``template``. 
-        ``template`` should be a string containing ``%s``, which will be
-        replaced with the name ``associate_to`` is copied to.  So if
-        ``associate_to`` is copied to *X* in the working directory, and
+        When the file *associate_to* is used in an execution, 
+        *file_or_alias* is also used, and named according to *template*. 
+        *template* should be a string containing ``%s``, which will be
+        replaced with the name *associate_to* is copied to.  So if
+        *associate_to* is copied to *X* in the working directory, and
         the template is ``"%s.idx"``, then `file_or_alias` is copied 
         to *X*``.idx``.
         """
@@ -1083,7 +1083,7 @@ class MiniLIMS(object):
             self.db.commit()
             
     def delete_file_association(self, file_or_alias, associated_to):
-        """Remove the file association from ``file_or_alias`` to ``associated_to``.
+        """Remove the file association from *file_or_alias* to *associated_to*.
 
         Both fields can be either an integer or an alias string.
         """

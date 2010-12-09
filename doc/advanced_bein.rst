@@ -110,49 +110,254 @@ See also "File associations" in :ref:`minilims`.
 Parallel executions
 *******************
 
+Many problems in bioinformatics parallelize nicely.  For example, mapping short reads from high throughput sequencers to a reference sequence parallelizes by splitting the reads into subsets and mapping the subsets in parallel.
 
+The ``@program`` decorator provides some magic to make this parallelization easy.  For example, if we have three files ``reads1``, ``reads2``, and ``reads3`` that we want to map to an index ``index`` with bowtie, we might naively write it as::
+
+    with execution(M) as ex:
+        ...
+        samfiles = [bowtie(ex, index, f) for f 
+                    in ["reads1","reads2","reads3"]]
+        ...
+
+But in the list comprehension, each bowtie is run one after another.  The parallel version is::
+
+    with execution(M) as ex:
+        ...
+        futures = [bowtie.nonblocking(ex, index, f) for f
+                   in ["reads1","reads2","reads3"]]
+        samfiles = [f.wait() for f in futures]
+        ...
+
+Every binding created with ``@program`` has a ``nonblocking`` method.  The ``nonblocking`` method returns an object called a "future" instead of the normal value.  The program is started in a separate thread and the execution continues.  If you are working on a cluster using the LSF batch submission system, you can use ``lsf`` in place of ``nonblocking`` to have the program run via LSF instead of locally.  Its semantics are identical.
+
+When you need the value from the program, call the method ``wait`` on the future.  ``wait`` blocks until the program finishes, then returns the value that would have been returned if you had called the program without ``nonblocking``.  In the example above, ``futures`` is a list of futures, one for each instance of bowtie.  Bowtie runs in parallel on all three files, and when all three have finished, the list of their output files is assigned to ``samfiles``.
+
+The example shows a common idiom for writing parallel executions in bein: use list comprehensions to get a list of futures, then wait on the list of futures to get a list of return values.  It is often used several times, one after another, to run a series of steps in parallel, as in::
+
+    with execution(M) as ex:
+        ...
+        futures = [bowtie.nonblocking(ex, index, f) for f
+                   in ["reads1","reads2","reads3"]]
+        samfiles = [f.wait() for f in futures]
+        futures = [sam_to_bam.nonblocking(ex, samfile) 
+                   for samfile in samfiles]
+        bamfiles = [f.wait() for f in futures]
+        ...
+
+Note that all the instances of bowtie will finish before any instance of ``sam_to_bam`` begin.  If one of the instances of bowtie finishes much earlier than the other, one of the computer's processors may sit idle until the other instances of bowtie finish.  To avoid this, divide your work evenly among the parallel jobs.
+
+The ``nonblocking`` and ``lsf`` methods only exist on objects created with the ``@program`` decorator.  This includes some, but not all, of the functions in :mod:`bein.util`.  Check the source code for a function to see if you can call it in parallel.
 
 Writing robust program bindings
 *******************************
 
+The tutorial's section on :ref:`program-binding` covers all the mechanics of writing a program binding.  This section is largely advice on how to write a good program binding.
+
+**Avoid unnecessary generality.**
+    If a change in command line arguments will produce vastly different behavior from the program you're binding, just choose one set of arguments that do what you want at the moment and bind that.  If you need the other arguments, and if they behavior is really that different, write another program binding for them when you need them.
+
+**Parse the whole output.**
+    At the moment you may only need two numbers of the twenty that this program calculates on your file, but chances are in a week's time you'll need another couple, and a few more after that.  Go ahead and parse the whole thing now.  When you have a lot of values to return, organize them into a dictionary.
+
+**Eschew abbreviations.**
+    Program bindings aren't meant for interactive shell use, so there is no reason not to make them easy to read.  Use 'copy' instead of 'cp,' 'antibody' instead of 'ab,' etc.
+
+**Parse in paranoia.**
+    ``wc`` formats its output slightly differently on different platforms.  The ``lsf`` method of a program binding adds a large header describing the batch job to the beginning of ``stdout`` before getting to the actual output of the program.  Parse the output knowing that these things happen.  For instance, to parse the output of ``wc -l``, the naive function would be::
+
+        def parse_output(p):
+            m = re.search(r'(\d+)', ''.join(p.stdout))
+            return int(m.groups()[0])
+
+    This returns the first integer in the output, not necessarily anything of interest.  The paranoid parser is::
+
+        def parse_output(p):
+            m = re.search(r'^\s+(\d+)\s+' + filename + r'\s*$',
+                          ''.join(p.stdout))
+            return int(m.groups()[-1])
+
+    This time we ensure we really do have the line we want, and in case the LSF output might contain a similarly formatted line, we take the last one in the text.
+
+    On the other hand, your parsing function will never get called unless the program exited with return code 0, so you can assume that it succeeded.  The output you want should be in there somewhere.
+
+**Return a value if you can, a function if you must.**
+    If you know the value you will return from a program binding before you run the program, as for the binding to ``touch``, return that value directly.  That is, write::
+
+        @program
+        def touch(filename):
+            return {'arguments': ['touch',filename],
+                    'return_value': filename}
+
+    and not::
+
+        @program
+        def touch(filename):
+           def parse_output(p):
+               return filename
+           return {'arguments': ['touch',filename],
+                   'return_value': parse_output}
+
+    Not only is it less efficient, it confuses the reader.
+
+**Accept a single argument or a list of arguments where appropriate.**
+    If a program can take several input files, such as ``cat``, then
+    let the user provide either a single filename or a list of
+    filenames.  Similarly, if the program takes one or more integers,
+    let the user provide an integer or a list of integers.
+
+    For example, here is a binding of `bowtie`` that can accept one or
+    several files of reads to map to a reference::
+
+        @program
+        def bowtie(index, reads, args="-Sra"):
+            sam_filename = unique_filename_in()
+            if isinstance(args, list):
+                options = args
+            elif isinstance(args, str):
+                options = [args]
+            else:
+                raise ValueError("bowtie's args keyword argument requires a string or a " + \
+                                 "list of strings.  Received: " + str(args))
+            if isinstance(reads, list):
+                reads = ",".join(reads)
+            return {'arguments': ['bowtie'] + options + [index, reads,sam_filename],
+                    'return_value': sam_filename}
+
+**Use** :func:`~bein.unique_filename_in` **to name output files.** 
+    If a program will create an output file, use
+    :func:`~bein.unique_filename_in` to get a name for it.  Don't hard
+    code names.
+
+**Let the program fail if at all possible.** 
+    Check the arguments passed to your function only enough to
+    actually produce a sensible argument list.  Otherwise let the
+    external program fail and bein clean up the mess.  You gain no
+    safety by carefully checking the arguments beforehand, you may
+    impose arbitrary restrictions that do not correspond to the
+    underlying program, and it makes program bindings much longer and
+    more onerous to read and write.
+
+**Document your binding.**
+    If the first thing in your function is a string, Python interprets it as documentation.  Use this!  List the exact command the program is running, the meaning of the arguments, and the return value.
+
+**No magic in program bindings.**
+    Don't try to cram all kinds of things into your program binding.  Just run the program and get the information in its basic form out of the results.  Do no more.  Write another function that calls the program binding which does anything more sophisticated.
+
+**Provide sensible defaults to keyword arguments.**
+    Many program bindings will have a number of arguments which can be safely omitted in the majority of cases.  For instance, :func:`~bein.util.split_file` accepts an argument *prefix* which lets you set the name of the output files.  In most cases this isn't necessary, so it has a default value of ``None``, which makes the function call :func:`~bein.unique_filename_in` to get a prefix.  Wherever possible, include a sane default.
+
+
 Combining bindings into larger actions
 **************************************
 
-Keep an initial execution argument for consistency of syntax.
+A workflow usually divides into sets of actions, each of which form a logical component of the whole.  Such components tend to be reusable with a little generalization, so it's worth breaking them out into separate functions.  For example, here is simplified code for :func:`~bein.util.parallel_bowtie`, which splits a file into pieces, runs bowtie in parallel on each piece, and reassembles the results::
 
+    def parallel_bowtie(ex, index, reads, n_lines = 1000000, 
+                        bowtie_args="-Sra"):
+        subfiles = split_file(ex, reads, n_lines = n_lines)
+        futures = [bowtie.nonblocking(ex, index, sf, args = bowtie_args) 
+                   for sf in subfiles]
+        samfiles = [f.wait() for f in futures]
+        futures = [sam_to_bam.nonblocking(ex, sf) for sf in samfiles]
+        bamfiles = [f.wait() for f in futures]
+        return merge_bamfiles.nonblocking(ex, bamfiles).wait()
+
+There are several points to keep in mind when writing such functions, all of which are illustrated by this example.  Most of them boil down to "don't surprise the user."
+
+* Assume the function with called in a ``with execution(M)...`` block.
+* The first argument should always be the execution, to maintain similarity with the program bindings.
+* Don't assume any file names from the surrounding execution.  Pass everything you need as arguments to the function.
+* Include keyword arguments with sane defaults for any optional arguments to programs you call in the function (such as *n_lines* in ``split_file``).
+* Do not delete or rename files in the working directory.
+* Return everything a user might need to know from the inside of the function.  If this is more than one thing, organize it in a dictionary.
+* Don't add files to the repository or use files from the repository inside the function.  Assume that all the files needed are already in place and their filenames have been passed as arguments.
 
 Custom ``add`` commands
 ***********************
 
+In `File associations`_ we saw commands to associate index files with BAM files, and to add and associate the complicated indices that ``bowtie`` uses.  Rather than rewriting this code again and again, it is better to write your own functions to add these in a structured way.
+
+The last point in `Combining bindings into larger actions`_ warned against adding or using files from the repository in a function.  Let us add a caveat: unless that function was written specifically to add files in some complicated way.  For example, here is a function that adds a bowtie index (it is a simplified version of :func:`~bein.util.add_bowtie_index`)::
+
+    def add_bowtie_index(execution, files, description="", alias=None):
+        index = bowtie_build(execution, files)
+        touch(ex, index)
+        execution.add(index, description=description, alias=alias)
+        execution.add(index + ".1.ebwt", associate_to_filename=index, template='%s.1.ebwt')
+        execution.add(index + ".2.ebwt", associate_to_filename=index, template='%s.2.ebwt')
+        execution.add(index + ".3.ebwt", associate_to_filename=index, template='%s.3.ebwt')
+        execution.add(index + ".4.ebwt", associate_to_filename=index, template='%s.4.ebwt')
+        execution.add(index + ".rev.1.ebwt", associate_to_filename=index, template='%s.rev.1.ebwt')
+        execution.add(index + ".rev.2.ebwt", associate_to_filename=index, template='%s.rev.2.ebwt')
+        return index
+
+Functions that add files should obey several conventions for consistency.
+
+* The function's name should begin with ``add_``.
+* The first argument should be an execution.
+* There should be one file which all other files added to the repository in the function are associated to.  That is, using that one file in another execution should pull in all files added by this function.  The function should return the filename of this file.
+* The function should have keyword arguments *description* (defaulting to ``""``) and *alias* (defaulting to ``None``).  The one file to which all others added by the function are associated should have its description set to *description* and its alias set to *alias*.
+
+``add_bowtie_index`` above obeys all of these.  Here is a simpler function that creates an index for a BAM file, then adds both BAM and index to the repository::
+
+    def add_and_index_bam(ex, bamfile, description="", alias=None):
+        sort = sort_bam(ex, bamfile)
+        index = index_bam(ex, sort)
+        ex.add(sort, description=description, alias=alias)
+        ex.add(index, description=description + " (BAM index)",
+               associate_to_filename=sort, template='%s.bai')
+        return fileid
+
+A file adding function need not add multiple files to be useful.  One of the most useful file adding functions in :mod:`bein.util` is :func:`~bein.util.add_pickle`, which takes any Python value, serializes it to a file, and adds that file to the repository::
+
+    def add_pickle(execution, val, description="", alias=None):
+        filename = unique_filename_in()
+        with open(filename, 'wb') as f:
+            pickle.dump(val, f)
+        execution.add(filename, description=description, alias=None)
+        return filename
+
+There is another useful idiom for file adding functions.  If you have a series of commands that construct an object, such as a plot, then you can write the file adding function as a context manager to wrap those commands.  For instance, the function :func:`~bein.util.add_figure` in :mod:`bein.util` creates plots with `matplotlib`, as in::
+
+    with execution(M) as ex:
+        ...
+        with add_figure(ex, 'eps', alias='my histogram') as fig:
+            hist(a)
+            xlabel('Random things I found')
+        ...
+
+This plots a histogram of whatever is in ``a``, and adds it to the repository as an EPS file with the alias ``'my histogram'``.  To write such file adding functions, decorate the function with ``@contextmanager`` (you will need to import is, such as with ``from contextlib import contextmanager``).  The function should do any setup required, then ``yield`` a value representing the object (in the case above, the figure), then add any necessary files and do any cleanup required.  At the ``yield`` statement, the body of the ``with`` statement is run.  Here is the code for ``add_figure``::
+
+    @contextmanager
+    def add_figure(ex, figure_type='eps', description="", alias=None):
+        f = pylab.figure()
+        yield f
+        filename = unique_filename_in() + '.' + figure_type
+        f.savefig(filename)
+        ex.add(filename, description=description, alias=alias)
+        return filename
+
+It may seem odd to have *description* and *alias* arguments, but not the arguments to associate a file to another that :meth:`bein.Execution.add` has.  In practice, these turn out not to be very useful for file adding functions, so you feel no qualm about omitting them.
 
 Structuring complicated workflows
 *********************************
 
-Put it in a single module
+This guide has given a lot of advice on how to structure individual functions and programs in bein, but what advice can we give on arranging a workflow as a whole?
 
-Pickle any intermediate computations you may want later
+First, put it in a single module unless it grows truly enormous.  If it reaches that point, you probably have a number of functions that should be cleaned up and contributed to :mod:`bein.util`.  I look forward to receiving them.  Once they are in the library for you to call, your module will shrink back to a usable size.
 
-Don't be afraid of plotting as you go along
+While developing, keep an ``ipython`` session running in a terminal in the same directory as your module.  As you make changes to the module, run::
 
-Put your workflow in a function, not just toplevel in the module.
+    import modulename
+    reload(modulename)
 
-Make it work crudely first, then make it elegant.
+to load your changes into ``ipython``.
 
-Factor out actions contributing to common tasks into functions.
+Inside the module, connect to your MiniLIMS first thing, and leave it as a global variable in the module.  Yes, global variables are bad practice, but you will use this one so universally that it justifies the practice.  All your actual workflows, on the other hand, you should put inside functions.  That way when you load or reload the module, they don't automatically run.  For workflows that take a lot of time, this would be especially annoying.
 
-Get unique filenames whenever you need them with ``unique_filename_in``.
+Begin crudely.  Get the first steps of your workflow working first, and inspect them with ``beinclient``.  Add a piece at a time, making sure it works.  Use :func:`~bein.util.add_pickle` and :func:`~bein.util.add_figure` to store and plot and intermediate computations that will be helpful to you.
 
-Organize parallel jobs and use list comprehension idiom to use them as a "checkpoint."
+Once the whole thing is working, then go back and start editing it to make it elegant.  Factor out logical sections of the workflow into functions, and generalize those functions.  Parallelize any places you can.  Look for any repeated additions of structured sets of files to the repository and write a file adding function to handle that case.
 
-Put your MiniLIMS toplevel in the module.  Makes it easier to get to.  I generally call it ``M`` because I refer to it so much.
-
-Keep an ipython open and run ``import modulename`` and ``reload(modulename)`` as you go to make things fast.
-
-As you get bindings and functions that are really robust and general, move them into your own utilities library, and send them to me so I can add them to bein.util for everyone else.
-
-When binding a program, don't try to handle all its arbitrary cases with different arguments.  Just choose the arguments you need now and make that work.  You can bind another case if you need it so fast that you shouldn't worry about it.  On the other hand, if you have a function that prints out a lot of structured information, go ahead and spend the time to parse it all and make it into a nice Python dictionary.
-
-When binding programs, remember that your return_value function will only get called if the program succeeded (returned 0) so you can pretty much assume that your stdout and stderr look the way they're supposed to and not bother with error conditions.  This makes binding much simpler.
-
-
-
+From here, spend some time with the documentation for bein's modules, and read the source code of bein itself.  Remember, it's short, less than 500 lines not counting blank lines and documentation.  You might also be interested in the :doc:`essay`.

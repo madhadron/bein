@@ -71,9 +71,9 @@ def sleep(n):
 def count_lines(filename):
     """Count the number of lines in *filename* (equivalent to ``wc -l``)."""
     def parse_output(p):
-        m = re.search(r'^\s+(\d+)\s+' + filename,
+        m = re.search(r'^\s+(\d+)\s+' + filename + r'\s*$',
                       ''.join(p.stdout))
-        return int(m.groups()[0])
+        return int(m.groups()[-1]) # in case of a weird line in LSF
     return {"arguments": ["wc","-l",filename],
             "return_value": parse_output}
 
@@ -274,7 +274,7 @@ def add_nh_flag(samfile):
 # Adding special file types
 
 
-def add_pickle(execution, val, description=""):
+def add_pickle(execution, val, description="", alias=None):
     """Pickle *val*, and add it to the repository.
 
     add_pickle lets you dump almost any Python value to a file in the
@@ -285,11 +285,12 @@ def add_pickle(execution, val, description=""):
     filename = unique_filename_in()
     with open(filename, 'wb') as f:
         pickle.dump(val, f)
-    execution.add(filename, description)
+    execution.add(filename, description=description, alias=None)
+    return filename
 
 
 @contextmanager
-def add_figure(ex, figure_type='eps', description=""):
+def add_figure(ex, figure_type='eps', description="", alias=None):
     """Create a matplotlib figure and write it to the repository.
 
     Use this as a with statement, for instance::
@@ -305,10 +306,11 @@ def add_figure(ex, figure_type='eps', description=""):
     yield f
     filename = unique_filename_in() + '.' + figure_type
     f.savefig(filename)
-    ex.add(filename, description)
+    ex.add(filename, description=description, alias=alias)
+    return filename
 
 
-def add_and_index_bam(ex, bamfile, description=""):
+def add_and_index_bam(ex, bamfile, description="", alias=None):
     """Indexes *bamfile* and adds it to the repository.
 
     The index created is properly associated to *bamfile* in the
@@ -317,10 +319,10 @@ def add_and_index_bam(ex, bamfile, description=""):
     """
     sort = sort_bam(ex, bamfile)
     index = index_bam(ex, sort)
-    fileid = ex.add(sort, description=description)
+    ex.add(sort, description=description, alias=alias)
     ex.add(index, description=description + " (BAM index)",
            associate_to_filename=sort, template='%s.bai')
-    return fileid
+    return sort
 
 
 def add_bowtie_index(execution, files, description="", alias=None, index=None):
