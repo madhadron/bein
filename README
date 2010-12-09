@@ -42,3 +42,11 @@ Changelog
 
 1.0:
     * First stable release of bein.
+
+
+Features to add someday
+-----------------------
+
+* A MiniLIMS based on PostgreSQL for scaling up MiniLIMS repositories.
+* A fancier MiniLIMS client.
+* Refactor bein.util into submodules based on domain.

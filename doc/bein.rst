@@ -11,6 +11,8 @@
 
     .. automethod:: use
 
+  .. _minilims:
+
   MiniLIMS
   *********
 

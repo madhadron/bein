@@ -7,7 +7,7 @@ bein 0.91 documentation
 =======================
 
 .. toctree::
-   :max-depth: 2
+   :max-depth: 3
 
 * :doc:`tutorial`
 * :doc:`advanced_bein`
