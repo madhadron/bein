@@ -1,6 +1,6 @@
 from distutils.core import setup
 setup(name='bein',
-      version='0.9',
+      version='0.95',
       description='Miniature LIMS and workflow manager for bioinformatics',
       author='Fred Ross',
       author_email='madhadron@gmail.com',
