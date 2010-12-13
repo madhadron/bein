@@ -421,10 +421,12 @@ def execution(lims = None, description=""):
         raise e
     finally:
         ex.finish()
-        if lims != None:
-            lims.write(ex, description, exception_string)
-        shutil.rmtree(ex.working_directory, ignore_errors=True)
-        os.chdir("..")
+        try:
+            if lims != None:
+                lims.write(ex, description, exception_string)
+        finally:
+            shutil.rmtree(ex.working_directory, ignore_errors=True)
+            os.chdir("..")
 
 class MiniLIMS(object):
     """Encapsulates a database and directory to track executions and files.
