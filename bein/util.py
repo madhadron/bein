@@ -37,6 +37,7 @@ import re
 import sys
 import os
 from bein import *
+import pysam
 
 # Basic utilities
 
@@ -71,7 +72,7 @@ def sleep(n):
 def count_lines(filename):
     """Count the number of lines in *filename* (equivalent to ``wc -l``)."""
     def parse_output(p):
-        m = re.search(r'^\s+(\d+)\s+' + filename + r'\s*$',
+        m = re.search(r'^\s*(\d+)\s+' + filename + r'\s*$',
                       ''.join(p.stdout))
         return int(m.groups()[-1]) # in case of a weird line in LSF
     return {"arguments": ["wc","-l",filename],
@@ -267,7 +268,7 @@ def add_nh_flag(samfile):
             if (read.is_unmapped):
                 nh = 0
             read.tags = read.tags+[("NH",nh)]
-            outfile.write(r)
+            outfile.write(read)
     infile.close()
     outfile.close()
     return outname
