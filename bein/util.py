@@ -342,7 +342,7 @@ def add_bowtie_index(execution, files, description="", alias=None, index=None):
     name of the index created.
     """
     index = bowtie_build(execution, files, index=index)
-    touch(ex, index)
+    touch(execution, index)
     execution.add(index, description=description, alias=alias)
     execution.add(index + ".1.ebwt", associate_to_filename=index, template='%s.1.ebwt')
     execution.add(index + ".2.ebwt", associate_to_filename=index, template='%s.2.ebwt')
