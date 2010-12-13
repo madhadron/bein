@@ -112,7 +112,6 @@ def bowtie(index, reads, args="-Sra"):
     list of strings.
     """
     sam_filename = unique_filename_in()
-    print "Got filename:", sam_filename
     if isinstance(args, list):
         options = args
     elif isinstance(args, str):
@@ -120,10 +119,8 @@ def bowtie(index, reads, args="-Sra"):
     else:
         raise ValueError("bowtie's args keyword argument requires a string or a " + \
                          "list of strings.  Received: " + str(args))
-    print "Using args", args
     if isinstance(reads, list):
         reads = ",".join(reads)
-    print "Reads:", reads
     return {"arguments": ["bowtie"] + options + [index, reads, sam_filename],
             "return_value": sam_filename}
 
