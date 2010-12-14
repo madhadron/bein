@@ -1,3 +1,4 @@
+
 # bein/__init__.py
 # Copyright 2010 Frederick Ross
 
@@ -425,8 +426,9 @@ def execution(lims = None, description=""):
             if lims != None:
                 lims.write(ex, description, exception_string)
         finally:
-            shutil.rmtree(ex.working_directory, ignore_errors=True)
             os.chdir("..")
+            shutil.rmtree(ex.working_directory, ignore_errors=True)
+
 
 class MiniLIMS(object):
     """Encapsulates a database and directory to track executions and files.
@@ -962,24 +964,35 @@ class MiniLIMS(object):
             sql = "delete from file where id = ?"
             [x for (x,) in self.db.execute(sql, (fileid, ))]
             os.remove(os.path.join(self.file_path, repository_name))
+            sql = "delete from file_alias where file=?"
+            self.db.execute(sql, (fileid,)).fetchone()
             self.db.commit()
+            try:
+                for (f,t) in self.associated_files_of(fileid):
+                    self.delete_file(f)
+            except ValueError, v:
+                pass
         except ValueError:
             raise ValueError("No such file id " + str(fileid))
 
     def delete_execution(self, execution_id):
         """Delete an execution from the MiniLIMS repository."""
         try:
+            files = self.search_files(source=('execution',execution_id))
+            for i in files:
+                try:
+                    self.delete_file(i)
+                except ValueError, v:
+                    pass
             self.db.execute("delete from argument where execution = ?",
                             (execution_id,))
             self.db.execute("delete from program where execution = ?", 
                             (execution_id,))
             self.db.execute("delete from execution where id = ?", 
                             (execution_id,))
-            [self.delete_file(i) for i in
-             self.search_files(source=('execution',execution_id))]
             self.db.commit()
         except ValueError, v:
-            raise ValueError("No such execution id " + str(execution_id))
+            raise ValueError("No such execution id " + str(execution_id) + ": " + v.message)
 
     def import_file(self, src, description=""):
         """Add an external file *src* to the MiniLIMS repository.
