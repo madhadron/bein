@@ -292,7 +292,7 @@ def add_pickle(execution, val, description="", alias=None):
 
 
 @contextmanager
-def add_figure(ex, figure_type='eps', description="", alias=None):
+def add_figure(ex, figure_type='eps', description="", alias=None, figure_size=None):
     """Create a matplotlib figure and write it to the repository.
 
     Use this as a with statement, for instance::
@@ -304,7 +304,7 @@ def add_figure(ex, figure_type='eps', description="", alias=None):
     This will plot a histogram of a with the x axis label set, and
     write the plot to the repository as an EPS file.
     """
-    f = pylab.figure()
+    f = pylab.figure(figsize=figure_size)
     yield f
     filename = unique_filename_in() + '.' + figure_type
     f.savefig(filename)

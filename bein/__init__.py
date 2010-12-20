@@ -1,4 +1,4 @@
-
+from __future__ import with_statement
 # bein/__init__.py
 # Copyright 2010 Frederick Ross
 
@@ -62,6 +62,7 @@ import time
 import shutil
 import threading
 from contextlib import contextmanager
+
 
 # miscellaneous types
 
