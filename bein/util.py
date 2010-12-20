@@ -250,7 +250,10 @@ def split_by_readname(samfile):
             last_read = r.qname
         else:
             accum.append(r)
-    yield accum
+    if last_read != None:
+        # We have to check, since if samfile
+        # has no alignments, accum is never defined.
+        yield accum
 
 def add_nh_flag(samfile):
     """Adds NH (Number of Hits) flag to each read alignment in *samfile*.

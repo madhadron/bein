@@ -336,6 +336,7 @@ class Execution(object):
         self.used_files = []
         self.started_at = int(time.time())
         self.finished_at = None
+        self.id = None
     def report(self, program):
         """Add a ProgramOutput object to the execution.
 
@@ -410,6 +411,17 @@ def execution(lims = None, description=""):
     throws an exception, ``execution`` writes the ``Execution`` to the
     MiniLIMS repository and deletes the temporary directory after all
     is finished.
+
+    The ``Execution`` has field ``id`` set to ``None`` during the
+    ``with`` block, but afterwards ``id`` is set to the execution ID
+    it ran as.  For example::
+
+        with execution(mylims) as ex:
+            pass
+
+        print ex.id
+
+    will print the execution ID the ``with`` block ran as.
     """
     execution_dir = unique_filename_in(os.getcwd())
     os.mkdir(os.path.join(os.getcwd(), execution_dir))
@@ -425,7 +437,7 @@ def execution(lims = None, description=""):
         ex.finish()
         try:
             if lims != None:
-                lims.write(ex, description, exception_string)
+                ex.id = lims.write(ex, description, exception_string)
         finally:
             os.chdir("..")
             shutil.rmtree(ex.working_directory, ignore_errors=True)

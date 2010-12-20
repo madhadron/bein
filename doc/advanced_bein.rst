@@ -356,8 +356,10 @@ to load your changes into ``ipython``.
 
 Inside the module, connect to your MiniLIMS first thing, and leave it as a global variable in the module.  Yes, global variables are bad practice, but you will use this one so universally that it justifies the practice.  All your actual workflows, on the other hand, you should put inside functions.  That way when you load or reload the module, they don't automatically run.  For workflows that take a lot of time, this would be especially annoying.
 
-Begin crudely.  Get the first steps of your workflow working first, and inspect them with ``beinclient``.  Add a piece at a time, making sure it works.  Use :func:`~bein.util.add_pickle` and :func:`~bein.util.add_figure` to store and plot and intermediate computations that will be helpful to you.
+Begin crudely.  Get the first steps of your workflow working first, and inspect them with ``beinclient``.  Add a piece at a time, making sure it works.  Use :func:`~bein.util.add_pickle` and :func:`~bein.util.add_figure` to store and plot and intermediate computations that will be helpful to you.  However, don't try to do publication quality plots in a workflow.  You will inevitably want to tweak them and the time waiting for the workflow to finish is wasted.  Instead, build them from pickled intermediates.
 
 Once the whole thing is working, then go back and start editing it to make it elegant.  Factor out logical sections of the workflow into functions, and generalize those functions.  Parallelize any places you can.  Look for any repeated additions of structured sets of files to the repository and write a file adding function to handle that case.
+
+Don't make your executions small and atomic.  Executions are a very crude form of isolation, and should usually be made as large as possible, say, one per script.
 
 From here, spend some time with the documentation for bein's modules, and read the source code of bein itself.  Remember, it's short, less than 500 lines not counting blank lines and documentation.  You might also be interested in the :doc:`essay`.

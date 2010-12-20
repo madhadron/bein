@@ -8,9 +8,15 @@ Bein is a small Python library.  It addresses two distinct problems: repeating a
 
 The venerable Unix shell represents one solution.  It has persisted for forty years because it is probably the fastest way to link together a few programs to operate on a single piece of data.  However, complicated sequences quickly become unwieldy.  Worse, parallel data sets quickly become snarled messes, as programmers realized immediately after the shell's introduction.  They were dealing with multiple versions of source code and running complicated commands to compile that code.  Resolving these problems has driven the last forty years of development of version control systems and build systems.
 
-An identical problem afflicts scientists and engineers.  They often have several sets of data from identical experiments, and suffer the same problems as programmers with multiple versions of source code.  This problem has been solved before, starting with the Discovery Net system from Imperial College London and continuing through modern systems like Galaxy.  These all suffer from one crucial problem which is best illustrated by a quote from Galaxy's website: "Stop wasting time writing interfaces and get your tools used by biologists!"  These systems turn mature, stable workflows into black boxes usable by a layman.  For a mass spectrometry or sequencing center which needs to process and track all the data it produces before turning it over to their customers, these are perfect, but they are little help for the working scientist who is still exploring.
+A similar problem afflicts scientists and engineers, who often have several sets of data from related experiments, and suffer the same problems as programmers with multiple versions of source code.  The right tool for the task depends strongly on how many such data sets there are and how complicated the analysis they have to run on it is.  We can take these two aspects as the coordinates of different systems to solve the problem.
 
-There has been nothing in between, no equivalent of ``git`` and ``make`` for the working scientist.  Bein fills that gap.
+.. image:: plot.png
+
+Most solutions have focused on long workflows with huge numbers of parallel data sets, starting with `Discovery Net <http://en.wikipedia.org/wiki/Discovery_Net>`_ from Imperial College London and continuing through modern systems like `Galaxy <http://galaxy.psu.edu/>`_.  These systems are ideal a mass spectrometry or sequencing center which needs to process and track all the data it produces before turning it over to its customers.
+
+On a somewhat smaller scale, another Python based system called `Ruffus <http://www.ruffus.org.uk/>`_ does a great deal of detailed handling of workflows, parallelizing jobs, and restarting workflows that failed.  It assumes some kind of external system to handle the files it produces.  For a well established pipeline, this is again marvelous.
+
+Much of a scientist's day to day work, however, involves fairly simple workflows of no more than ten or twenty steps, and five or six parallel data sets.  In this case all these systems are overkill, and their sophistication becomes a millstone around the practitioner's neck.  This is the niche that bein fills.
 
 Bein is tiny.  It's under 1000 lines of code, and the core logic is under 500.  It is the result of a year of writing, testing, and rewriting to make a tool for the day to day work in the Bioinformatics and Biostatistics Core Facility of the Ecole Polytechnique Federale de Lausanne.
 
@@ -111,7 +117,7 @@ and point your browsier to ``http://localhost:8080``.
 
 We have two tabs at the top of the page, one for executions, one for files in the repository.  Each execution is assigned a unique numeric ID.  Every external program run by an execution is recorded.  If it produced output on ``stdout`` or ``stderr`` that is recorded as well (though ``touch`` does not, so it is absent here).  Finally, if an execution had failed, the Python exception from that failure is recorded and displayed.
 
-If we click on the "Files" tab in ``beinclient``, it is empty.  Filling this tab is the topic of our next two sections.
+If we click on the "Files" tab in ``beinclient``, it is empty. Filling this tab is the topic of our next two sections.
 
 
 Using the MiniLIMS from executions
@@ -229,6 +235,16 @@ MiniLIMS provides a number of other useful methods as well.  In particular, you 
   .. automethod:: search_files
 
   .. automethod:: search_executions
+
+Using the MiniLIMS effectively in a program often requires knowing the execution ID of some workflow you just ran.  The execution's ``id`` field is set to this ID after an execution finishes.  During an execution, however, its ID is ``None``.  Consider the code::
+
+    with execution(M) as ex:
+        print ex.id
+
+    print ex.id
+
+The print statement in the execution prints ``None``.  The print statement after the execution prints the integer assigned as the execution's ID.
+
 
 .. _program-binding:
 
