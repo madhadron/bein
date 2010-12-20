@@ -37,6 +37,7 @@ import re
 import sys
 import os
 from bein import *
+import pysam
 
 # Basic utilities
 
@@ -71,7 +72,7 @@ def sleep(n):
 def count_lines(filename):
     """Count the number of lines in *filename* (equivalent to ``wc -l``)."""
     def parse_output(p):
-        m = re.search(r'^\s+(\d+)\s+' + filename + r'\s*$',
+        m = re.search(r'^\s*(\d+)\s+' + filename + r'\s*$',
                       ''.join(p.stdout))
         return int(m.groups()[-1]) # in case of a weird line in LSF
     return {"arguments": ["wc","-l",filename],
@@ -121,7 +122,7 @@ def bowtie(index, reads, args="-Sra"):
                          "list of strings.  Received: " + str(args))
     if isinstance(reads, list):
         reads = ",".join(reads)
-    return {"arguments": ["bowtie"] + options + [index, reads,sam_filename],
+    return {"arguments": ["bowtie"] + options + [index, reads, sam_filename],
             "return_value": sam_filename}
 
 
@@ -249,6 +250,10 @@ def split_by_readname(samfile):
             last_read = r.qname
         else:
             accum.append(r)
+    if last_read != None:
+        # We have to check, since if samfile
+        # has no alignments, accum is never defined.
+        yield accum
 
 def add_nh_flag(samfile):
     """Adds NH (Number of Hits) flag to each read alignment in *samfile*.
@@ -266,7 +271,7 @@ def add_nh_flag(samfile):
             if (read.is_unmapped):
                 nh = 0
             read.tags = read.tags+[("NH",nh)]
-            outfile.write(r)
+            outfile.write(read)
     infile.close()
     outfile.close()
     return outname
@@ -290,7 +295,7 @@ def add_pickle(execution, val, description="", alias=None):
 
 
 @contextmanager
-def add_figure(ex, figure_type='eps', description="", alias=None):
+def add_figure(ex, figure_type='eps', description="", alias=None, figure_size=None):
     """Create a matplotlib figure and write it to the repository.
 
     Use this as a with statement, for instance::
@@ -302,7 +307,7 @@ def add_figure(ex, figure_type='eps', description="", alias=None):
     This will plot a histogram of a with the x axis label set, and
     write the plot to the repository as an EPS file.
     """
-    f = pylab.figure()
+    f = pylab.figure(figsize=figure_size)
     yield f
     filename = unique_filename_in() + '.' + figure_type
     f.savefig(filename)
@@ -338,7 +343,7 @@ def add_bowtie_index(execution, files, description="", alias=None, index=None):
     name of the index created.
     """
     index = bowtie_build(execution, files, index=index)
-    touch(ex, index)
+    touch(execution, index)
     execution.add(index, description=description, alias=alias)
     execution.add(index + ".1.ebwt", associate_to_filename=index, template='%s.1.ebwt')
     execution.add(index + ".2.ebwt", associate_to_filename=index, template='%s.2.ebwt')

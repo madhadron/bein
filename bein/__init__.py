@@ -1,3 +1,4 @@
+from __future__ import with_statement
 # bein/__init__.py
 # Copyright 2010 Frederick Ross
 
@@ -61,6 +62,7 @@ import time
 import shutil
 import threading
 from contextlib import contextmanager
+
 
 # miscellaneous types
 
@@ -334,6 +336,7 @@ class Execution(object):
         self.used_files = []
         self.started_at = int(time.time())
         self.finished_at = None
+        self.id = None
     def report(self, program):
         """Add a ProgramOutput object to the execution.
 
@@ -408,6 +411,17 @@ def execution(lims = None, description=""):
     throws an exception, ``execution`` writes the ``Execution`` to the
     MiniLIMS repository and deletes the temporary directory after all
     is finished.
+
+    The ``Execution`` has field ``id`` set to ``None`` during the
+    ``with`` block, but afterwards ``id`` is set to the execution ID
+    it ran as.  For example::
+
+        with execution(mylims) as ex:
+            pass
+
+        print ex.id
+
+    will print the execution ID the ``with`` block ran as.
     """
     execution_dir = unique_filename_in(os.getcwd())
     os.mkdir(os.path.join(os.getcwd(), execution_dir))
@@ -421,10 +435,13 @@ def execution(lims = None, description=""):
         raise e
     finally:
         ex.finish()
-        if lims != None:
-            lims.write(ex, description, exception_string)
-        shutil.rmtree(ex.working_directory, ignore_errors=True)
-        os.chdir("..")
+        try:
+            if lims != None:
+                ex.id = lims.write(ex, description, exception_string)
+        finally:
+            os.chdir("..")
+            shutil.rmtree(ex.working_directory, ignore_errors=True)
+
 
 class MiniLIMS(object):
     """Encapsulates a database and directory to track executions and files.
@@ -960,24 +977,35 @@ class MiniLIMS(object):
             sql = "delete from file where id = ?"
             [x for (x,) in self.db.execute(sql, (fileid, ))]
             os.remove(os.path.join(self.file_path, repository_name))
+            sql = "delete from file_alias where file=?"
+            self.db.execute(sql, (fileid,)).fetchone()
             self.db.commit()
+            try:
+                for (f,t) in self.associated_files_of(fileid):
+                    self.delete_file(f)
+            except ValueError, v:
+                pass
         except ValueError:
             raise ValueError("No such file id " + str(fileid))
 
     def delete_execution(self, execution_id):
         """Delete an execution from the MiniLIMS repository."""
         try:
+            files = self.search_files(source=('execution',execution_id))
+            for i in files:
+                try:
+                    self.delete_file(i)
+                except ValueError, v:
+                    pass
             self.db.execute("delete from argument where execution = ?",
                             (execution_id,))
             self.db.execute("delete from program where execution = ?", 
                             (execution_id,))
             self.db.execute("delete from execution where id = ?", 
                             (execution_id,))
-            [self.delete_file(i) for i in
-             self.search_files(source=('execution',execution_id))]
             self.db.commit()
         except ValueError, v:
-            raise ValueError("No such execution id " + str(execution_id))
+            raise ValueError("No such execution id " + str(execution_id) + ": " + v.message)
 
     def import_file(self, src, description=""):
         """Add an external file *src* to the MiniLIMS repository.
