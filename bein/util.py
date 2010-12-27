@@ -290,7 +290,7 @@ def add_pickle(execution, val, description="", alias=None):
     filename = unique_filename_in()
     with open(filename, 'wb') as f:
         pickle.dump(val, f)
-    execution.add(filename, description=description, alias=None)
+    execution.add(filename, description=description, alias=alias)
     return filename
 
 
