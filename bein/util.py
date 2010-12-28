@@ -165,6 +165,33 @@ def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add
         bamfiles = [f.wait() for f in futures]
     return merge_bam.nonblocking(ex, bamfiles).wait()
 
+def deepmap(f, st):
+    """Map function *f* over a structure *st*.
+
+    *f* should be a function of one argument.  *st* is a data
+    structure consisting of lists, tuples, and dictionaries.  *f* is
+    applied to every value in *st*.
+
+    >>> deepmap(lambda x: x, 1)
+    1
+    >>> deepmap(lambda x: x, [1, 2, 3])
+    [1, 2, 3]
+    >>> deepmap(lambda x: x, (1, 2, 3))
+    (1, 2, 3)
+    >>> deepmap(lambda x: x, {1: 2, 3: 4})
+    {1: 2, 3: 4}
+    >>> deepmap(lambda x: x, {1: (2, [3, 4, 5]), 2: {5: [1, 2], 6: (3, )}})
+    {1: (2, [3, 4, 5]), 2: {5: [1, 2], 6: (3,)}}
+    """
+    if isinstance(st, list):
+        return [f(q) for q in st]
+    elif isinstance(st, tuple):
+        return tuple(f(q) for q in list(st))
+    elif isinstance(st, dict):
+        return dict([(k,f(v)) for k,v in st.iteritems()])
+    else:
+        return f(st)
+
 def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
     """Identical to parallel_bowtie, but runs programs via LSF."""
     subfiles = split_file(ex, reads, n_lines = n_lines)
@@ -352,3 +379,7 @@ def add_bowtie_index(execution, files, description="", alias=None, index=None):
     execution.add(index + ".rev.1.ebwt", associate_to_filename=index, template='%s.rev.1.ebwt')
     execution.add(index + ".rev.2.ebwt", associate_to_filename=index, template='%s.rev.2.ebwt')
     return index
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
