@@ -372,4 +372,14 @@ Certain errors show up all the time.  Check for them first:
 * Did you convert all of the arguments to a bound program to strings?
 * Did you misspell a filename?
 
+Sometimes, though, you expect an error to happen.  In this case you can catch the ``ProgramFailed`` exception inside the execution, as in::
+
+    with execution(M) as ex:
+        try:
+            ...stuff that fails here...
+        except ProgramFailed, pf:
+            ...do something with the exception...
+
+Unless you reraise the exception, the execution will terminate as though it had finished without error.
+
 From here, you should go read the advice in :doc:`advanced_bein`, which covers the more advanced features of the system and some useful things you probably hadn't thought of doing with it.
