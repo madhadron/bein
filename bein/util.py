@@ -60,6 +60,25 @@ def touch(filename = None):
     return {"arguments": ["touch",filename],
             "return_value": filename}
 
+@program
+def remove_lines_matching(pattern, filename):
+    output_file = unique_filename_in()
+    return {'arguments': ['gawk',"""!/%s/ { print $0 > "%s" }""" % (pattern,output_file),
+                          filename],
+            'return_value': output_file}
+    
+
+@program
+def md5sum(filename):
+    """Calculate the MD5 sum of *filename* and return it as a string."""
+    def parse_output(p):
+        m = re.search(r'^\s*([a-f0-9A-F]+)\s+' + filename + r'\s*$',
+                      ''.join(p.stdout))
+        return m.groups()[-1] # in case of a weird line in LSF
+    return {"arguments": ["md5sum",filename],
+            "return_value": parse_output}
+
+        
 
 @program
 def sleep(n):
@@ -156,13 +175,14 @@ def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add
     and adds the flag before merging the BAM files.
     """
     subfiles = split_file(ex, reads, n_lines = n_lines)
-    futures = [bowtie.nonblocking(ex, index, sf, args = bowtie_args) for sf in subfiles]
-    samfiles = [f.wait() for f in futures]
+    futures = deepmap(lambda sf: bowtie.nonblocking(ex, index, sf, args = bowtie_args), 
+                      subfiles)
+    samfiles = deepmap(lambda f: f.wait(), futures)
     if add_nh_flags:
-        bamfiles = [add_nh_flag(sf) for sf in samfiles]
+        bamfiles = deepmap(add_nh_flag, samfiles)
     else:
-        futures = [sam_to_bam.nonblocking(ex, sf) for sf in samfiles]
-        bamfiles = [f.wait() for f in futures]
+        futures = deepmap(lambda sf: sam_to_bam.nonblocking(ex, sf), samfiles)
+        bamfiles = deepmap(lambda f: f.wait(), futures)
     return merge_bam.nonblocking(ex, bamfiles).wait()
 
 def deepmap(f, st):
@@ -195,13 +215,14 @@ def deepmap(f, st):
 def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
     """Identical to parallel_bowtie, but runs programs via LSF."""
     subfiles = split_file(ex, reads, n_lines = n_lines)
-    futures = [bowtie.lsf(ex, index, sf, args = bowtie_args) for sf in subfiles]
-    samfiles = [f.wait() for f in futures]
+    futures = deepmap(lambda sf: bowtie.lsf(ex, index, sf, args = bowtie_args), 
+                      subfiles)
+    samfiles = deepmap(lambda f: f.wait(), futures)
     if add_nh_flags:
-        bamfiles = [add_nh_flag(sf) for sf in samfiles]
+        bamfiles = deepmap(add_nh_flag, samfiles)
     else:
-        futures = [sam_to_bam.lsf(ex, sf) for sf in samfiles]
-        bamfiles = [f.wait() for f in futures]
+        futures = deepmap(lambda sf: sam_to_bam.lsf(ex, sf), samfiles)
+        bamfiles = deepmap(lambda f: f.wait(), futures)
     return merge_bam.lsf(ex, bamfiles).wait()
 
 ###############
@@ -220,6 +241,25 @@ def sam_to_bam(sam_filename):
     return {"arguments": ["samtools","view","-b","-S","-o",
                           bam_filename,sam_filename],
             "return_value": bam_filename}
+
+@program
+def bam_to_sam(bam_filename):
+    """Convert *bam_filename* to a SAM file.
+
+    Equivalent: ``samtools view -h bam_filename ...``
+    """
+    sam_filename = unique_filename_in()
+    return {'arguments': ['samtools','view','-h','-o',sam_filename,bam_filename],
+            'return_value': sam_filename}
+
+@program
+def replace_bam_header(header, bamfile):
+    """Replace the header of *bamfile* with that in *header*
+
+    The header in *header* should be that of a SAM file.
+    """
+    return {'arguments': ['samtools','reheader',header,bamfile],
+            'return_value': bamfile}
 
 @program
 def sort_bam(bamfile):
@@ -256,9 +296,13 @@ def merge_bam(files):
     merged into a single BAM file, and the filename of that new file
     is returned.
     """
-    filename = unique_filename_in()
-    return {'arguments': ['samtools','merge',filename] + files,
-            'return_value': filename}
+    if len(files) == 1:
+        return {'arguments': ['echo'],
+                'return_value': files[0]}
+    else:
+        filename = unique_filename_in()
+        return {'arguments': ['samtools','merge',filename] + files,
+                'return_value': filename}
 
 def split_by_readname(samfile):
     """Return an iterator over the reads in *samfile* grouped by read name.
