@@ -119,6 +119,13 @@ def split_file(filename, n_lines = 1000, prefix = None, suffix_length = 3):
             "return_value": extract_filenames}
 
 
+def use_pickle(ex, id_or_alias):
+    """Loads *id_or_alias* as a pickle file and returns the pickled objects."""
+    f = ex.use(id_or_alias)
+    with open(f) as q:
+        d = pickle.load(q)
+    return d
+
 ########
 # Bowtie
 ########
@@ -196,6 +203,8 @@ def deepmap(f, st):
     1
     >>> deepmap(lambda x: x, [1, 2, 3])
     [1, 2, 3]
+    >>> deepmap(lambda x: x+1, {'a': [1,2], 'b': [3,4]})
+    {'a': [2, 3], 'b': [4, 5]}
     >>> deepmap(lambda x: x, (1, 2, 3))
     (1, 2, 3)
     >>> deepmap(lambda x: x, {1: 2, 3: 4})
@@ -204,11 +213,11 @@ def deepmap(f, st):
     {1: (2, [3, 4, 5]), 2: {5: [1, 2], 6: (3,)}}
     """
     if isinstance(st, list):
-        return [f(q) for q in st]
+        return [deepmap(f, q) for q in st]
     elif isinstance(st, tuple):
-        return tuple(f(q) for q in list(st))
+        return tuple([deepmap(f, q) for q in list(st)])
     elif isinstance(st, dict):
-        return dict([(k,f(v)) for k,v in st.iteritems()])
+        return dict([(k,deepmap(f, v)) for k,v in st.iteritems()])
     else:
         return f(st)
 

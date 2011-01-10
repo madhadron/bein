@@ -7,6 +7,8 @@
 
   .. autofunction:: add_pickle
 
+  .. autofunction:: use_pickle
+
   .. autofunction:: count_lines(execution, filename)
 
   .. autofunction:: pause
