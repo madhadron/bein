@@ -422,6 +422,20 @@ def execution(lims = None, description="", remote_working_directory=None):
         print ex.id
 
     will print the execution ID the ``with`` block ran as.
+
+    On some clusters, such as VITAL-IT in Lausanne, the path to the
+    current directory is different on worker nodes where batch jobs
+    run than on the nodes from which jobs are submitted.  For
+    instance, if you are working in /scratch/abc on your local node,
+    the worker nodes might mount the same directory as
+    /nfs/boris/scratch/abc.  In this case, the lsf method of bound
+    programs would not work correctly.
+
+    If this is the case, you can pass the equivalent directory on
+    worker nodes as *remote_working_directory*.  In the example above,
+    an execution may create a directory lK4321fdr21 in /scratch/abc.
+    On the worker node, it would be /nfs/boris/scratch/abc/lK4321fd21,
+    so you pass /nfs/boris/scratch/abc as *remote_working_directory*.
     """
     execution_dir = unique_filename_in(os.getcwd())
     os.mkdir(os.path.join(os.getcwd(), execution_dir))
