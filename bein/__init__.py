@@ -429,7 +429,8 @@ def execution(lims = None, description="", remote_working_directory=None):
     if remote_working_directory == None:
         ex.remote_working_directory = ex.working_directory
     else:
-        ex.remote_working_directory = remote_working_directory
+        ex.remote_working_directory = os.path.join(remote_working_directory,
+                                                   execution_dir)
     os.chdir(os.path.join(os.getcwd(), execution_dir))
     exception_string = None
     try:
