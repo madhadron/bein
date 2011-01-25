@@ -113,7 +113,7 @@ def split_file(filename, n_lines = 1000, prefix = None, suffix_length = 3):
         prefix = unique_filename_in()
     def extract_filenames(p):
         return [re.search(r"creating file .(.+)'", x).groups()[0]
-                for x in p.stdout]
+                for x in p.stdout + p.stderr]
     return {"arguments": ["split", "--verbose", "-a", str(suffix_length),
                           "-l", str(n_lines), filename, prefix],
             "return_value": extract_filenames}
