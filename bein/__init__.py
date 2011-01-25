@@ -275,7 +275,7 @@ class program(object):
         d = self.gen_args(*args, **kwargs)
         stdout_filename = unique_filename_in(ex.working_directory)
         stderr_filename = unique_filename_in(ex.working_directory)
-        cmds = ["bsub","-cwd",ex.working_directory,"-o",stdout_filename,"-e",stderr_filename,
+        cmds = ["bsub","-cwd",ex.remote_working_directory,"-o",stdout_filename,"-e",stderr_filename,
                 "-K","-r"] + d["arguments"]
         class Future(object):
             def __init__(self):
@@ -396,7 +396,7 @@ class Execution(object):
 
 
 @contextmanager
-def execution(lims = None, description=""):
+def execution(lims = None, description="", remote_working_directory=None):
     """Create an ``Execution`` connected to the given MiniLIMS object.
     
     ``execution`` is a ``contextmanager``, so it can be used in a ``with``
@@ -426,6 +426,10 @@ def execution(lims = None, description=""):
     execution_dir = unique_filename_in(os.getcwd())
     os.mkdir(os.path.join(os.getcwd(), execution_dir))
     ex = Execution(lims,os.path.join(os.getcwd(), execution_dir))
+    if remote_working_directory == None:
+        ex.remote_working_directory = ex.working_directory
+    else:
+        ex.remote_working_directory = remote_working_directory
     os.chdir(os.path.join(os.getcwd(), execution_dir))
     exception_string = None
     try:
