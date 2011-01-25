@@ -119,9 +119,20 @@ def split_file(filename, n_lines = 1000, prefix = None, suffix_length = 3):
             "return_value": extract_filenames}
 
 
-def use_pickle(ex, id_or_alias):
-    """Loads *id_or_alias* as a pickle file and returns the pickled objects."""
-    f = ex.use(id_or_alias)
+def use_pickle(ex_or_lims, id_or_alias):
+    """Loads *id_or_alias* as a pickle file and returns the pickled objects.
+
+    *ex_or_lims* may be either an execution object or a MiniLIMS object.
+    """
+    
+    if isinstance(ex_or_lims, MiniLIMS):
+        lims = ex_or_lims
+    elif isinstance(ex_or_lims, Execution):
+        lims = ex_or_lims.lims
+    else:
+        raise ValueError("ex_or_lims must be a MiniLIMS or Execution.")
+
+    f = lims.path_to_file(id_or_alias)
     with open(f) as q:
         d = pickle.load(q)
     return d
