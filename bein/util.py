@@ -38,6 +38,7 @@ import sys
 import os
 from bein import *
 import pysam
+import threading
 
 # Basic utilities
 
@@ -136,6 +137,44 @@ def use_pickle(ex_or_lims, id_or_alias):
     with open(f) as q:
         d = pickle.load(q)
     return d
+
+def background(fun, *args, **kwargs):
+    """Run a function, but return a Future object instead of blocking.
+
+    Instead of blocking, it starts the function in a separate thread,
+    and returns an object which lets the user choose when to wait for
+    the function by calling its wait() method.  wait() blocks its
+    current thread until the function returns, then wait returns the
+    value returned by the function.
+
+        f = background(sqrt, 0)
+        a = f.wait()
+
+    is exactly equivalent to
+
+        a = sqrt(0)
+
+    except that in the first case, sqrt is run in a separate thread.
+
+    The argument list after *fun* is exactly what you would pass to
+    *fun* if you were calling it directly, including keyword
+    arguments.
+    """
+    class Future(object):
+        def __init__(self):
+            self.return_value = None
+
+        def wait(self):
+            v.wait()
+            return self.return_value
+    future = Future()
+    v = threading.Event()
+    def g():
+        future.return_value = fun(*args, **kwargs)
+        v.set()
+    a = threading.Thread(target=g)
+    a.start()
+    return(future)
 
 ########
 # Bowtie
