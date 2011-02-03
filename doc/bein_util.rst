@@ -19,6 +19,8 @@
 
   .. autofunction:: touch(execution, filename = None)
 
+  .. autofunction:: background(f, *args, **kwargs)
+
   Sequence alignment with ``bowtie``
   **********************************
 
