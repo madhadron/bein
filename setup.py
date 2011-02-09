@@ -6,6 +6,6 @@ setup(name='bein',
       author='Fred Ross',
       author_email='madhadron@gmail.com',
       packages=['bein'],
-      scripts=['beinclient'],
+      scripts=['beinclient','add_nh_flag'],
       classifiers=['Topic :: System :: Shells', 'Topic :: Scientific/Engineering :: Bio-Informatics']
       )

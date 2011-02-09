@@ -1,0 +1,40 @@
+#!python
+import getopt
+import os
+from bein.util import *
+
+usage = """add_nh_flag input output
+
+input      SAM/BAM file to read from.
+output     SAM/BAM file to write to.
+"""
+
+class Usage(Exception):
+    def __init__(self,  msg):
+        self.msg = msg
+
+def main(argv = None):
+    if argv is None:
+        argv = sys.argv[1:]
+    try:
+        if len(argv) != 2:
+            raise Usage("add_nh_flag takes exactly two arguments.")
+
+        input_file = argv[0]
+        output_file = argv[1]
+
+        if not(os.path.exists(input_file)):
+            raise Usage("Input file %s does not exist." % input_file)
+        if os.path.exists(output_file):
+            raise Usage("Output file %s already exists." % output_file)
+
+        add_nh_flag(input_file, output_file)
+
+        sys.exit(0)
+    except Usage, err:
+        print >>sys.stderr, err.msg
+        print >>sys.stderr, usage
+        sys.exit(2)
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -246,15 +246,15 @@ def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add
     and adds the flag before merging the BAM files.
     """
     subfiles = split_file(ex, reads, n_lines = n_lines)
-    futures = deepmap(lambda sf: bowtie.nonblocking(ex, index, sf, args = bowtie_args), 
-                      subfiles)
-    samfiles = deepmap(lambda f: f.wait(), futures)
+    futures = [bowtie.nonblocking(ex, index, sf, args = bowtie_args)
+               for sf in subfiles]
+    samfiles = [f.wait() for f in futures]
     if add_nh_flags:
-        bamfiles = deepmap(add_nh_flag, samfiles)
+        bamfiles = [add_nh_flag(sf) for sf in samfiles]
     else:
-        futures = deepmap(lambda sf: sam_to_bam.nonblocking(ex, sf), samfiles)
-        bamfiles = deepmap(lambda f: f.wait(), futures)
-    return merge_bam.nonblocking(ex, bamfiles).wait()
+        futures = [sam_to_bam.nonblocking(ex, sf) for sf in samfiles]
+        bamfiles = [f.wait() for f in futures]
+    return merge_bam(ex, bamfiles)
 
 def deepmap(f, st):
     """Map function *f* over a structure *st*.
@@ -288,14 +288,14 @@ def deepmap(f, st):
 def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
     """Identical to parallel_bowtie, but runs programs via LSF."""
     subfiles = split_file(ex, reads, n_lines = n_lines)
-    futures = deepmap(lambda sf: bowtie.lsf(ex, index, sf, args = bowtie_args), 
-                      subfiles)
-    samfiles = deepmap(lambda f: f.wait(), futures)
+    futures = [bowtie.lsf(ex, index, sf, args = bowtie_args)
+               for sf in subfiles]
+    samfiles = [f.wait() for f in futures]
     if add_nh_flags:
-        bamfiles = deepmap(add_nh_flag, samfiles)
+        bamfiles = [add_nh_flag(sf) for sf in samfiles]
     else:
-        futures = deepmap(lambda sf: sam_to_bam.lsf(ex, sf), samfiles)
-        bamfiles = deepmap(lambda f: f.wait(), futures)
+        futures = [sam_to_bam.lsf(ex, sf) for sf in samfiles]
+        bamfiles = [f.wait() for f in futures]
     return merge_bam.lsf(ex, bamfiles).wait()
 
 ###############
@@ -399,15 +399,20 @@ def split_by_readname(samfile):
         # has no alignments, accum is never defined.
         yield accum
 
-def add_nh_flag(samfile):
+def add_nh_flag(samfile, out=None):
     """Adds NH (Number of Hits) flag to each read alignment in *samfile*.
     
-    Scans a TAM file ordered by read name, counts the number of
+    Scans a BAM file ordered by read name, counts the number of
     alternative alignments reported and writes them to a BAM file
     with the NH tag added.
+
+    If *out* is ``None``, a random name is used.
     """
     infile = pysam.Samfile(samfile, "r")
-    outname = unique_filename_in()
+    if out == None:
+        outname = unique_filename_in()
+    else:
+        outname = out
     outfile = pysam.Samfile(outname, "wb", template=infile)
     for readset in split_by_readname(infile):
         nh = len(readset)
