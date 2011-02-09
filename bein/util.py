@@ -292,11 +292,18 @@ def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra",
                for sf in subfiles]
     samfiles = [f.wait() for f in futures]
     if add_nh_flags:
-        bamfiles = [add_nh_flag(sf) for sf in samfiles]
+        futures = [external_add_nh_flag.lsf(sf) for sf in samfiles]
+        bamfiles = [f.wait() for f in futures]
     else:
         futures = [sam_to_bam.lsf(ex, sf) for sf in samfiles]
         bamfiles = [f.wait() for f in futures]
     return merge_bam.lsf(ex, bamfiles).wait()
+
+@program
+def external_add_nh_flag(samfile):
+    outfile = unique_filename_in()
+    return {'arguments': ['add_nh_file',samfile,outfile],
+            'return_value': outfile}
 
 ###############
 # BAM/SAM files
