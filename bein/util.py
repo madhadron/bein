@@ -48,6 +48,20 @@ def pause():
     sys.stdin.readline()
     return None
 
+def first_n_lines(input_file, n, output_file = None):
+    """Writes the first *n* lines of *input_file* to another file.
+
+    If *output_file* is ``None``, then the output is written to a randomly named file.
+    """
+    if output_file == None:
+        output_file = unique_filename_in()
+    with open(input_file, 'r') as inf:
+        with open(output_file, 'w') as outf:
+            for i in xrange(n):
+                l = inf.readline()
+                outf.write(l)
+    return output_file
+            
 
 @program
 def touch(filename = None):

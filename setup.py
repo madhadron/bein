@@ -1,6 +1,6 @@
 from distutils.core import setup
 setup(name='bein',
-      version='0.96',
+      version='0.98',
       url='http://madhadron.com/bein',
       description='Miniature LIMS and workflow manager for bioinformatics',
       author='Fred Ross',
