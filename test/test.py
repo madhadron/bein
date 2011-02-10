@@ -1,6 +1,7 @@
 import socket
 import re
-from unittest import TestCase, TestSuite, main
+import sys
+from unittest import TestCase, TestSuite, main, TestLoader
 
 from bein import *
 
@@ -93,5 +94,20 @@ parallel_bowtie:
 
 """
 
+def test_given(tests):
+    module = sys.modules[__name__]
+    if tests == None:
+        defaultTest = None
+    else:
+        loader = TestLoader()
+        defaultTest = TestSuite()
+        tests = loader.loadTestsFromNames(tests, module)
+        defaultTest.addTests(tests)
+    main(defaultTest=defaultTest)
+
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) > 1:
+        test_given(sys.argv[1:])
+    else:
+        test_given(None)
+
