@@ -17,7 +17,10 @@ def count_lines(filename):
     def parse_output(p):
         m = re.search(r'^\s*(\d+)\s+' + filename + r'\s*$',
                       ''.join(p.stdout))
-        return int(m.groups()[-1]) # in case of a weird line in LSF
+        if m == None:
+            return None
+        else:
+            return int(m.groups()[-1]) # in case of a weird line in LSF
     return {"arguments": ["wc","-l",filename],
             "return_value": parse_output}
 

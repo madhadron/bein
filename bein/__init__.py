@@ -305,7 +305,7 @@ class program(object):
             stdout = None
             stderr = None
             while not(os.path.exists(os.path.join(ex.working_directory, stdout_filename)) and
-                      os.path.exists(os.path.join(ex.working_Directory, stderr_filename))):
+                      os.path.exists(os.path.join(ex.working_directory, stderr_filename))):
                 pass # We need to wait until the files actually show up
             with open(os.path.join(ex.working_directory,stdout_filename), 'r') as fo:
                 stdout = fo.readlines()
