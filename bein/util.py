@@ -232,7 +232,7 @@ def bowtie_build(files, index = None):
             'return_value': index}
 
 
-def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
+def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False, via='local'):
     """Run bowtie in parallel on pieces of *reads*.
 
     Splits *reads* into chunks *n_lines* long, then runs bowtie with
@@ -244,17 +244,22 @@ def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add
     Bowtie does not set the NH flag on its SAM file output.  If the
     *add_nh_flags* argument is ``True``, this function calculates
     and adds the flag before merging the BAM files.
+
+    The *via* argument determines how the jobs will be run.  The
+    default, ``'local'``, runs them on the same machine in separate
+    threads.  ``'lsf'`` submits them via LSF.
     """
     subfiles = split_file(ex, reads, n_lines = n_lines)
-    futures = [bowtie.nonblocking(ex, index, sf, args = bowtie_args)
+    futures = [bowtie.nonblocking(ex, index, sf, args=bowtie_args, via=via)
                for sf in subfiles]
     samfiles = [f.wait() for f in futures]
     if add_nh_flags:
-        bamfiles = [add_nh_flag(sf) for sf in samfiles]
-    else:
-        futures = [sam_to_bam.nonblocking(ex, sf) for sf in samfiles]
+        futures = [external_add_nh_flag.nonblocking(sf, via=via) for sf in samfiles]
         bamfiles = [f.wait() for f in futures]
-    return merge_bam(ex, bamfiles)
+    else:
+        futures = [sam_to_bam.nonblocking(ex, sf, via=via) for sf in samfiles]
+        bamfiles = [f.wait() for f in futures]
+    return merge_bam.nonblocking(ex, bamfiles, via=via).wait()
 
 def deepmap(f, st):
     """Map function *f* over a structure *st*.
@@ -287,17 +292,7 @@ def deepmap(f, st):
 
 def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
     """Identical to parallel_bowtie, but runs programs via LSF."""
-    subfiles = split_file(ex, reads, n_lines = n_lines)
-    futures = [bowtie.lsf(ex, index, sf, args = bowtie_args)
-               for sf in subfiles]
-    samfiles = [f.wait() for f in futures]
-    if add_nh_flags:
-        futures = [external_add_nh_flag.lsf(sf) for sf in samfiles]
-        bamfiles = [f.wait() for f in futures]
-    else:
-        futures = [sam_to_bam.lsf(ex, sf) for sf in samfiles]
-        bamfiles = [f.wait() for f in futures]
-    return merge_bam.lsf(ex, bamfiles).wait()
+    return parallel_bowtie(ex, index, reads, n_lines, bowtie_args, add_nh_flags, via='lsf')
 
 @program
 def external_add_nh_flag(samfile):

@@ -67,7 +67,7 @@ class TestProgramBinding(TestCase):
                 self.assertEqual(str(q.__class__), "<class 'bein.Future'>")
                 self.assertEqual(q.wait(), 3)            
         else:
-            pass
+            print >>sys.stderr, "Not running test_parallel_bowtie_lsf because we're not on VITAL-IT"
 """
 This is a doctest file for bein.util.
 
