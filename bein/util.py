@@ -254,7 +254,7 @@ def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add
                for sf in subfiles]
     samfiles = [f.wait() for f in futures]
     if add_nh_flags:
-        futures = [external_add_nh_flag.nonblocking(sf, via=via) for sf in samfiles]
+        futures = [external_add_nh_flag.nonblocking(ex, sf, via=via) for sf in samfiles]
         bamfiles = [f.wait() for f in futures]
     else:
         futures = [sam_to_bam.nonblocking(ex, sf, via=via) for sf in samfiles]
