@@ -231,7 +231,25 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
+
+        if kwargs.has_key('via'):
+            via = kwargs['via']
+            kwargs.pop('via')
+        else:
+            via = 'local'
+
+        if via == 'local':
+            return self.local(ex, *args, **kwargs)
+        elif via == 'lsf':
+            return self.lsf(ex, *args, **kwargs)
+
+    def local(self, ex, *args, **kwargs):
+        """Like ``nonblocking``, but always runs locally.
+
+        If you need to pass a ``via`` keyword argument to your function, you will have to call this method directly.
+        """
         d = self.gen_args(*args, **kwargs)
+
         class Future(object):
             def __init__(self):
                 self.program_output = None
@@ -263,13 +281,7 @@ class program(object):
         return(f)
 
     def lsf(self, ex, *args, **kwargs):
-        """Run a program via the LSF batch queue.
-
-        For the programmer, this method appears identical to
-        nonblocking, except that the program is run via the LSF batch
-        system (using the bsub command) instead of as a local
-        subprocess.
-        """
+        """Like ``nonblocking``, but always runs via LSF."""
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args, **kwargs)
