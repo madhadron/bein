@@ -232,7 +232,8 @@ def bowtie_build(files, index = None):
             'return_value': index}
 
 
-def parallel_bowtie(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False, via='local'):
+def parallel_bowtie(ex, index, reads, n_lines = 1000000, 
+                    bowtie_args="-Sra", add_nh_flags=False, via='local'):
     """Run bowtie in parallel on pieces of *reads*.
 
     Splits *reads* into chunks *n_lines* long, then runs bowtie with
@@ -297,7 +298,7 @@ def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra",
 @program
 def external_add_nh_flag(samfile):
     outfile = unique_filename_in()
-    return {'arguments': ['add_nh_file',samfile,outfile],
+    return {'arguments': ['add_nh_flag',samfile,outfile],
             'return_value': outfile}
 
 ###############

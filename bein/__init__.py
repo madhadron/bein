@@ -261,21 +261,26 @@ class program(object):
         f = Future()
         v = threading.Event()
         def g():
-            sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE,
-                                  cwd = ex.working_directory)
-            return_code = sp.wait()
-            f.program_output = ProgramOutput(return_code, sp.pid,
-                                             d["arguments"], 
-                                             sp.stdout.readlines(), 
-                                             sp.stderr.readlines())
-            if return_code == 0:
-                z = d["return_value"]
-                if callable(z):
-                    f.return_value = z(f.program_output)
-                else:
-                    f.return_value = z
-            v.set()
+            try:
+                sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE,
+                                      cwd = ex.working_directory)
+                return_code = sp.wait()
+                f.program_output = ProgramOutput(return_code, sp.pid,
+                                                 d["arguments"], 
+                                                 sp.stdout.readlines(), 
+                                                 sp.stderr.readlines())
+                if return_code == 0:
+                    z = d["return_value"]
+                    if callable(z):
+                        f.return_value = z(f.program_output)
+                    else:
+                        f.return_value = z
+                v.set()
+            except:
+                f.return_value = None
+                v.set()
+                raise
         a = threading.Thread(target=g)
         a.start()
         return(f)
@@ -300,26 +305,33 @@ class program(object):
         f = Future()
         v = threading.Event()
         def g():
-            sp = subprocess.Popen(cmds, bufsize=-1)
-            return_code = sp.wait()
-            stdout = None
-            stderr = None
-            while not(os.path.exists(os.path.join(ex.working_directory, stdout_filename)) and
-                      os.path.exists(os.path.join(ex.working_directory, stderr_filename))):
-                pass # We need to wait until the files actually show up
-            with open(os.path.join(ex.working_directory,stdout_filename), 'r') as fo:
-                stdout = fo.readlines()
-            with open(os.path.join(ex.working_directory,stderr_filename), 'r') as fe:
-                stderr = fe.readlines()
-            f.program_output = ProgramOutput(return_code, sp.pid,
-                                             cmds, stdout, stderr)
-            if return_code == 0:
-                z = d["return_value"]
-                if callable(z):
-                    f.return_value = z(f.program_output)
-                else:
-                    f.return_value = z
-            v.set()
+            try:
+                sp = subprocess.Popen(cmds, bufsize=-1)
+                return_code = sp.wait()
+                stdout = None
+                stderr = None
+                while not(os.path.exists(os.path.join(ex.working_directory,
+                                                      stdout_filename)) and
+                          os.path.exists(os.path.join(ex.working_directory,
+                                                      stderr_filename))):
+                    pass # We need to wait until the files actually show up
+                with open(os.path.join(ex.working_directory,stdout_filename), 'r') as fo:
+                    stdout = fo.readlines()
+                with open(os.path.join(ex.working_directory,stderr_filename), 'r') as fe:
+                    stderr = fe.readlines()
+                f.program_output = ProgramOutput(return_code, sp.pid,
+                                                 cmds, stdout, stderr)
+                if return_code == 0:
+                    z = d["return_value"]
+                    if callable(z):
+                        f.return_value = z(f.program_output)
+                    else:
+                        f.return_value = z
+                v.set()
+            except:
+                f.return_value = None
+                v.set()
+                raise
         a = threading.Thread(target=g)
         a.start()
         return(f)
