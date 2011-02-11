@@ -102,9 +102,11 @@ def unique_filename_in(path=None):
     def random_string():
         return "".join([random.choice(string.letters + string.digits) 
                         for x in range(20)])
-    filename = random_string()
-    while os.path.exists(os.path.join(path,filename)):
+    while True:
         filename = random_string()
+        files = [f for f in os.listdir(path) if f.startswith(filename)]
+        if files == []:
+            break
     return filename
 
 
