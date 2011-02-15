@@ -1102,7 +1102,11 @@ class MiniLIMS(object):
         might have to be resolved.        
         """
         if isinstance(alias, int):
-            return alias
+            x = self.db.execute("select id from file where id=?", (alias,)).fetchall()
+            if x != [] and x != None:
+                return alias
+            else:
+                raise ValueError("No such file with id %d" % alias)
         elif isinstance(alias, str):
             x = self.db.execute("select file from file_alias where alias=?", (alias,)).fetchone()
             if x == None:

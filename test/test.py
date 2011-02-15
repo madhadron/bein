@@ -99,6 +99,27 @@ class TestUniqueFilenameIn(TestCase):
             g = touch(ex)
             self.assertNotEqual(f, g)
 
+class TestMiniLIMS(TestCase):
+    def test_resolve_alias_exception_on_no_file(self):
+        with execution(None) as ex:
+            M = MiniLIMS("boris")
+            self.assertRaises(ValueError, M.resolve_alias, 55)
+
+    def test_resolve_alias_returns_int_if_exists(self):
+        with execution(None) as ex:
+            f = touch(ex)
+            M = MiniLIMS("boris")
+            a = M.import_file(f)
+            self.assertEqual(M.resolve_alias(a), a)
+
+    def test_resolve_alias_with_alias(self):
+        with execution(None) as ex:
+            f = touch(ex)
+            M = MiniLIMS("boris")
+            a = M.import_file(f)
+            M.add_alias(a, 'hilda')
+            self.assertEqual(M.resolve_alias('hilda'), a)
+
 
 def test_given(tests):
     module = sys.modules[__name__]

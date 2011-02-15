@@ -42,6 +42,7 @@ class TestBowtie(TestCase):
                 new_sam = remove_lines_matching(ex, '@PG', sam)
                 new_bam = sam_to_bam(ex, new_sam)
                 self.assertEqual(md5sum(ex, new_bam), 'find right md5sum')
+
         else:
             print >>sys.stderr, "Not running test_parallel_bowtie_lsf because we're not on VITAL-IT"
 

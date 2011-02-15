@@ -339,7 +339,7 @@ def replace_bam_header(header, bamfile):
 
 @program
 def sort_bam(bamfile):
-    """Sort a BAM file *bamfile*.
+    """Sort a BAM file *bamfile* by chromosome coordinates.
 
     Returns the filename of the newly created, sorted BAM file.
 
@@ -347,6 +347,18 @@ def sort_bam(bamfile):
     """
     filename = unique_filename_in()
     return {'arguments': ['samtools','sort',bamfile,filename],
+            'return_value': filename + '.bam'}
+
+@program
+def sort_bam_by_read(bamfile):
+    """Sort a BAM file *bamfile* by read names.
+
+    Returns the filename of the newly created, sorted BAM file.
+
+    Equivalent: ``samtools sort -n ...``
+    """
+    filename = unique_filename_in()
+    return {'arguments': ['samtools','sort','-n',bamfile,filename],
             'return_value': filename + '.bam'}
 
 
