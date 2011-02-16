@@ -30,15 +30,14 @@ analysis of high throughput sequencing data, but if you have useful
 functions for a different domain, please contribute them.
 """
 
-from contextlib import contextmanager
 import pickle
-import pylab
 import re
 import sys
 import os
-from bein import *
-import pysam
 import threading
+from contextlib import contextmanager
+
+from bein import *
 
 # Basic utilities
 
@@ -393,13 +392,14 @@ def merge_bam(files):
                 'return_value': filename}
 
 def split_by_readname(samfile):
-    """Return an iterator over the reads in *samfile* grouped by read name.
+    """(Deprecated) Return an iterator over the reads in *samfile* grouped by read name.
 
     The SAM file produced by bowtie is sorted by read name.  Often we
     want to work with all of the alignments of a particular read at
     once.  This function turns the flat list of reads into a list of
     lists of reads, where each sublist has the same read name.
     """
+    raise DeprecationWarning("Use itertools.groupby instead.")
     last_read = None
     for r in samfile:
         if r.qname != last_read:
@@ -414,31 +414,35 @@ def split_by_readname(samfile):
         # has no alignments, accum is never defined.
         yield accum
 
-def add_nh_flag(samfile, out=None):
-    """Adds NH (Number of Hits) flag to each read alignment in *samfile*.
-    
-    Scans a BAM file ordered by read name, counts the number of
-    alternative alignments reported and writes them to a BAM file
-    with the NH tag added.
-
-    If *out* is ``None``, a random name is used.
-    """
-    infile = pysam.Samfile(samfile, "r")
-    if out == None:
-        outname = unique_filename_in()
-    else:
-        outname = out
-    outfile = pysam.Samfile(outname, "wb", template=infile)
-    for readset in split_by_readname(infile):
-        nh = len(readset)
-        for read in readset:
-            if (read.is_unmapped):
-                nh = 0
-            read.tags = read.tags+[("NH",nh)]
-            outfile.write(read)
-    infile.close()
-    outfile.close()
-    return outname
+try:
+    import pysam
+    def add_nh_flag(samfile, out=None):
+        """Adds NH (Number of Hits) flag to each read alignment in *samfile*.
+        
+        Scans a BAM file ordered by read name, counts the number of
+        alternative alignments reported and writes them to a BAM file
+        with the NH tag added.
+        
+        If *out* is ``None``, a random name is used.
+        """
+        infile = pysam.Samfile(samfile, "r")
+        if out == None:
+            outname = unique_filename_in()
+        else:
+            outname = out
+        outfile = pysam.Samfile(outname, "wb", template=infile)
+        for readset in split_by_readname(infile):
+            nh = len(readset)
+            for read in readset:
+                if (read.is_unmapped):
+                    nh = 0
+                read.tags = read.tags+[("NH",nh)]
+                outfile.write(read)
+        infile.close()
+        outfile.close()
+        return outname
+except:
+    print >>sys.stderr, "PySam not found.  Skipping add_nh_flag."
 
 # Adding special file types
 
@@ -457,25 +461,28 @@ def add_pickle(execution, val, description="", alias=None):
     execution.add(filename, description=description, alias=alias)
     return filename
 
-
-@contextmanager
-def add_figure(ex, figure_type='eps', description="", alias=None, figure_size=None):
-    """Create a matplotlib figure and write it to the repository.
-
-    Use this as a with statement, for instance::
-
-        with add_figure(ex, 'eps') as fig:
-            hist(a)
-            xlabel('Random things I found')
-
-    This will plot a histogram of a with the x axis label set, and
-    write the plot to the repository as an EPS file.
-    """
-    f = pylab.figure(figsize=figure_size)
-    yield f
-    filename = unique_filename_in() + '.' + figure_type
-    f.savefig(filename)
-    ex.add(filename, description=description, alias=alias)
+try:
+    import pylab
+    @contextmanager
+    def add_figure(ex, figure_type='eps', description="", alias=None, figure_size=None):
+        """Create a matplotlib figure and write it to the repository.
+    
+        Use this as a with statement, for instance::
+    
+            with add_figure(ex, 'eps') as fig:
+                hist(a)
+                xlabel('Random things I found')
+    
+        This will plot a histogram of a with the x axis label set, and
+        write the plot to the repository as an EPS file.
+        """
+        f = pylab.figure(figsize=figure_size)
+        yield f
+        filename = unique_filename_in() + '.' + figure_type
+        f.savefig(filename)
+        ex.add(filename, description=description, alias=alias)
+except:
+    print >>sys.stderr, "Could not import matplotlib.  Skipping add_figure."
 
 
 def add_and_index_bam(ex, bamfile, description="", alias=None):
@@ -516,6 +523,22 @@ def add_bowtie_index(execution, files, description="", alias=None, index=None):
     execution.add(index + ".rev.1.ebwt", associate_to_filename=index, template='%s.rev.1.ebwt')
     execution.add(index + ".rev.2.ebwt", associate_to_filename=index, template='%s.rev.2.ebwt')
     return index
+
+try:
+    import tables as h5
+    @contextmanager
+    def add_hdf5(ex, description='', alias=None):
+        h5filename = unique_filename_in()
+        db = h5.openFile(h5filename, 'w', title=description)
+        try:
+            yield db
+        finally:
+            db.close()
+            ex.add(db, description=description, alias=alias)
+except:
+    print >>sys.stderr, "PyTables not found.  Skipping."
+
+
 
 if __name__ == "__main__":
     import doctest
