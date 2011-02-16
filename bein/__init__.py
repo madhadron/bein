@@ -230,6 +230,17 @@ class program(object):
         with execution(lims) as ex:
             a = touch.nonblocking("boris")
             f = a.wait()
+
+        All the methods are named as _method, with the same arguments
+        as ``nonblocking``.  That is, the ``via="local"`` method is
+        implemented by ``_local``, the ``via="lsf"`` method by
+        ``_lsf``, etc.  When writing a new method, name it in the same
+        way, and add a condition to the ``if`` statement in
+        ``nonblocking``.
+
+        If you need to pass a keyword argument ``via`` to your
+        program, you will need to call one of the hidden methods
+        (``_local`` or ``_lsf``) directly.
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
@@ -241,11 +252,11 @@ class program(object):
             via = 'local'
 
         if via == 'local':
-            return self.local(ex, *args, **kwargs)
+            return self._local(ex, *args, **kwargs)
         elif via == 'lsf':
-            return self.lsf(ex, *args, **kwargs)
+            return self._lsf(ex, *args, **kwargs)
 
-    def local(self, ex, *args, **kwargs):
+    def _local(self, ex, *args, **kwargs):
         """Like ``nonblocking``, but always runs locally.
 
         If you need to pass a ``via`` keyword argument to your function, you will have to call this method directly.
@@ -288,6 +299,11 @@ class program(object):
         return(f)
 
     def lsf(self, ex, *args, **kwargs):
+        """Deprecated.  Use nonblocking(via="lsf") instead."""
+        raise DeprecationWarning("Use nonblocking(via='lsf') instead.")
+        return self._lsf(ex, *args, **kwargs)
+
+    def _lsf(self, ex, *args, **kwargs):
         """Like ``nonblocking``, but always runs via LSF."""
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
