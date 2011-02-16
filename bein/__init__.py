@@ -308,7 +308,8 @@ class program(object):
         v = threading.Event()
         def g():
             try:
-                sp = subprocess.Popen(cmds, bufsize=-1)
+                nullout = open(os.path.devnull, 'w')
+                sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
                 return_code = sp.wait()
                 stdout = None
                 stderr = None
