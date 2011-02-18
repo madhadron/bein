@@ -7,6 +7,8 @@ from unittest import TestCase, TestSuite, main, TestLoader
 from bein import *
 from bein.util import touch
 
+M = MiniLIMS("testing_lims")
+
 def hostname_contains(pattern):
     hostname = socket.gethostbyaddr(socket.gethostname())[0]
     if re.search(pattern, hostname) == None:
@@ -38,7 +40,7 @@ class TestProgramBinding(TestCase):
         with execution(None) as ex:
             with open('boris','w') as f:
                 f.write("This is a test\nof the emergency broadcast\nsystem.\n")
-            q = count_lines.local(ex, 'boris')
+            q = count_lines._local(ex, 'boris')
             self.assertEqual(str(q.__class__), "<class 'bein.Future'>")
             self.assertEqual(q.wait(), 3)
 
@@ -47,7 +49,7 @@ class TestProgramBinding(TestCase):
             with execution(None) as ex:
                 with open('boris','w') as f:
                     f.write("This is a test\nof the emergency broadcast\nsystem.\n")
-                q = count_lines.lsf(ex, 'boris')
+                q = count_lines._lsf(ex, 'boris')
                 self.assertEqual(str(q.__class__), "<class 'bein.Future'>")
                 self.assertEqual(q.wait(), 3)            
         else:
@@ -119,6 +121,36 @@ class TestMiniLIMS(TestCase):
             a = M.import_file(f)
             M.add_alias(a, 'hilda')
             self.assertEqual(M.resolve_alias('hilda'), a)
+
+@program
+def echo(s):
+    return {'arguments': ['echo',str(s)],
+            'return_value': None}
+
+class TestStdoutStderrRedirect(TestCase):
+    def test_stdout_redirected(self):
+        try:
+            with execution(M) as ex:
+                f = unique_filename_in()
+                echo(ex, "boris!", stdout=f)
+                with open(f) as q:
+                    l = q.readline()
+            self.assertEqual(l, 'boris!\n')
+        finally:
+            M.delete_execution(ex.id)
+
+    def test_stdout_local_redirected(self):
+        try:
+            with execution(None) as ex:
+                f = unique_filename_in()
+                m = echo.nonblocking(ex, "boris!", stdout=f)
+                m.wait()
+                with open(f) as q:
+                    l = q.readline()
+            self.assertEqual(l, 'boris!\n')
+        finally:
+            M.delete_execution(ex.id)
+
 
 
 def test_given(tests):

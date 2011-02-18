@@ -191,15 +191,37 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to program " + self.gen_args.__name__ + " must be an Execution.")
+        if kwargs.has_key('stdout'):
+            stdout = open(kwargs['stdout'],'w')
+            kwargs.pop('stdout')
+        else:
+            stdout = subprocess.PIPE
+
+        if kwargs.has_key('stderr'):
+            stderr = open(kwargs['stderr'],'w')
+            kwargs.pop('stderr')
+        else:
+            stderr = subprocess.PIPE
+
+
         d = self.gen_args(*args, **kwargs)
-        sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE,
+        sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=stdout,
+                              stderr=stderr,
                               cwd = ex.working_directory)
         return_code = sp.wait()
+        if isinstance(stdout,file):
+            stdout_value = None
+        else:
+            stdout_value = sp.stdout.readlines()
+            
+        if isinstance(stderr,file):
+            stderr_value = None
+        else:
+            stderr_value = sp.stderr.readlines()
+                
         po = ProgramOutput(return_code, sp.pid,
-                                d["arguments"], 
-                                sp.stdout.readlines(),  # stdout and stderr
-                                sp.stderr.readlines())  # are lists of strings ending with newlines
+                           d["arguments"], 
+                           stdout_value, stderr_value)
         ex.report(po)
         if return_code == 0:
             z = d["return_value"]
@@ -261,6 +283,18 @@ class program(object):
 
         If you need to pass a ``via`` keyword argument to your function, you will have to call this method directly.
         """
+        if kwargs.has_key('stdout'):
+            stdout = open(kwargs['stdout'],'w')
+            kwargs.pop('stdout')
+        else:
+            stdout = subprocess.PIPE
+
+        if kwargs.has_key('stderr'):
+            stderr = open(kwargs['stderr'],'w')
+            kwargs.pop('stderr')
+        else:
+            stderr = subprocess.PIPE
+
         d = self.gen_args(*args, **kwargs)
 
         class Future(object):
@@ -275,14 +309,25 @@ class program(object):
         v = threading.Event()
         def g():
             try:
-                sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE,
+                sp = subprocess.Popen(d["arguments"], bufsize=-1, 
+                                      stdout=stdout,
+                                      stderr=stderr,
                                       cwd = ex.working_directory)
                 return_code = sp.wait()
+                if isinstance(stdout,file):
+                    stdout_value = None
+                else:
+                    stdout_value = sp.stdout.readlines()
+
+                if isinstance(stderr,file):
+                    stderr_value = None
+                else:
+                    stderr_value = sp.stderr.readlines()
+
                 f.program_output = ProgramOutput(return_code, sp.pid,
                                                  d["arguments"], 
-                                                 sp.stdout.readlines(), 
-                                                 sp.stderr.readlines())
+                                                 stdout_value,
+                                                 stderr_value)
                 if return_code == 0:
                     z = d["return_value"]
                     if callable(z):
@@ -308,9 +353,24 @@ class program(object):
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args, **kwargs)
-        stdout_filename = unique_filename_in(ex.working_directory)
-        stderr_filename = unique_filename_in(ex.working_directory)
-        cmds = ["bsub","-cwd",ex.remote_working_directory,"-o",stdout_filename,"-e",stderr_filename,
+
+        if kwargs.has_key('stdout'):
+            stdout = open(kwargs['stdout'],'w')
+            kwargs.pop('stdout')
+            load_stdout = False
+        else:
+            stdout = unique_filename_in(ex.working_directory)
+            load_stdout = True
+
+        if kwargs.has_key('stderr'):
+            stderr = open(kwargs['stderr'],'w')
+            kwargs.pop('stderr')
+            load_stderr = False
+        else:
+            stderr = unique_filename_in(ex.working_directory)
+            load_stderr = True
+
+        cmds = ["bsub","-cwd",ex.remote_working_directory,"-o",stdout,"-e",stderr,
                 "-K","-r"] + d["arguments"]
         class Future(object):
             def __init__(self):
@@ -327,19 +387,25 @@ class program(object):
                 nullout = open(os.path.devnull, 'w')
                 sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
                 return_code = sp.wait()
-                stdout = None
-                stderr = None
                 while not(os.path.exists(os.path.join(ex.working_directory,
-                                                      stdout_filename)) and
+                                                      stdout)) and
                           os.path.exists(os.path.join(ex.working_directory,
-                                                      stderr_filename))):
+                                                      stderr))):
                     pass # We need to wait until the files actually show up
-                with open(os.path.join(ex.working_directory,stdout_filename), 'r') as fo:
-                    stdout = fo.readlines()
-                with open(os.path.join(ex.working_directory,stderr_filename), 'r') as fe:
-                    stderr = fe.readlines()
+                if load_stdout:
+                    with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
+                        stdout_value = fo.readlines()
+                else:
+                    stdout_value = None
+
+                if load_stderr:
+                    with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
+                        stderr = fe.readlines()
+                else:
+                    stderr_value = None
+
                 f.program_output = ProgramOutput(return_code, sp.pid,
-                                                 cmds, stdout, stderr)
+                                                 cmds, stdout_value, stderr_value)
                 if return_code == 0:
                     z = d["return_value"]
                     if callable(z):
@@ -788,9 +854,18 @@ class MiniLIMS(object):
                          exception_string))
         [exid] = [x for (x,) in self.db.execute("select last_insert_rowid()")]
         for i,p in enumerate(ex.programs):
+            if p.stdout == None:
+                stdout_value = ""
+            else:
+                stdout_value = "".join(p.stdout)
+            if p.stderr == None:
+                stderr_value = ""
+            else:
+                stderr_value = "".join(p.stderr)
+
             self.db.execute("""insert into program(pos,execution,pid,return_code,stdout,stderr) values (?,?,?,?,?,?)""",
                             (i, exid, p.pid, p.return_code,
-                             "".join(p.stdout), "".join(p.stderr)))
+                             stdout_value, stderr_value))
             for j,a in enumerate(p.arguments):
                 self.db.execute("""insert into argument(pos,program,execution,argument) values (?,?,?,?)""",
                                 (j,i,exid,a))
