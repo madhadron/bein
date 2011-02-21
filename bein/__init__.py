@@ -868,14 +868,15 @@ class MiniLIMS(object):
         to the repository are copied to the repository and entered in
         the file table.
         """
-        self.db.execute("""
-                        insert into execution(started_at,finished_at,
-                                              working_directory,description,
-                                              exception) 
-                        values (?,?,?,?,?)""",
-                        (ex.started_at, ex.finished_at, ex.working_directory, description,
-                         exception_string))
-        [exid] = [x for (x,) in self.db.execute("select last_insert_rowid()")]
+        self.db.execute("""insert into execution
+                           (started_at, finished_at, working_directory,
+                            description, exception) 
+                           values (?,?,?,?,?)""",
+                        (ex.started_at, ex.finished_at, ex.working_directory, 
+                         description, exception_string))
+        exid = self.db.execute("select last_insert_rowid()").fetchone()[0]
+
+        # Write all the programs
         for i,p in enumerate(ex.programs):
             if p.stdout == None:
                 stdout_value = ""
@@ -886,33 +887,100 @@ class MiniLIMS(object):
             else:
                 stderr_value = "".join(p.stderr)
 
-            self.db.execute("""insert into program(pos,execution,pid,return_code,stdout,stderr) values (?,?,?,?,?,?)""",
+            self.db.execute("""insert into program(pos,execution,pid,
+                                                   return_code,stdout,stderr)
+                               values (?,?,?,?,?,?)""",
                             (i, exid, p.pid, p.return_code,
                              stdout_value, stderr_value))
             for j,a in enumerate(p.arguments):
-                self.db.execute("""insert into argument(pos,program,execution,argument) values (?,?,?,?)""",
+                self.db.execute("""insert into argument(pos,program,execution,
+                                   argument) values (?,?,?,?)""",
                                 (j,i,exid,a))
+
+        # Write the files
+
+        # This section is rather complicated due to the necessity of
+        # handling hierarchies of associations correctly.  The
+        # algorithm is roughly as follows:
+
+        # remaining = files which have yet to be inserted
+        # removed = those files already processed
+        # while True:
+        #     these = all files to be processed this round,
+        #             defined as those whose associate_to_file field
+        #             (field 3 of the tuple) is in removed.
+        #     for file in these:
+        #         insert the file
+        #         add any alias
+        #         associate the file, renaming it so association namings are
+        #             preserved even in the repository
+
         fileids = {}
-        for (filename,description,associate_to_id,associate_to_filename,template,alias) in ex.files:
-            self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value) values (?,importfile(?),?,?,?)""",
-                            (filename,os.path.abspath(os.path.join(ex.working_directory,filename)),
-                             description,'execution',exid))
-            fileids[filename] = self.db.execute("""select last_insert_rowid()""").fetchone()[0]
-            if alias != None:
-                self.add_alias(fileids[filename], alias)
-            if template != None and \
-                    (associate_to_id != None or \
-                         associate_to_filename != None):
-                if associate_to_id != None:
-                    target = associate_to_id
-                elif associate_to_filename != None:
-                    target = fileids[associate_to_filename]
-                self.associate_file(fileids[filename],target,
-                                    template)
+        removed = [(None,)]
+        remaining = ex.files
+        while remaining != []:
+            these = [k for k in ex.files if k[3] in [x[0] for x in removed]]
+
+            for (filename,description,associate_to_id,associate_to_filename,
+                 template,alias) in these:
+
+                fileids[filename] = self._insert_file(ex, exid, filename, description)
+
+                if alias != None:
+                    self.add_alias(thisid, alias)
+
+                if associate_to_id != None or associate_to_filename != None:
+                    if template == None:
+                        raise ValueError("Must provide a template for an association.")
+                    elif template == "%s":
+                        raise ValueError("Template must be more than just %s")
+                    elif template.index("%s") == -1:
+                        raise ValueError("Template must contain %s")
+                    elif associate_to_id != None:
+                        self._associate_file(fileids[filename], associate_to_id, template)
+                    else:
+                        self._associate_file(fileids[filename], fileids[associate_to_filename], template)
+
+            [remaining.remove(t) for t in these]
+            removed.extend(these)
+
+
         for used_file in set(ex.used_files):
-            [x for x in self.db.execute("""insert into execution_use(execution,file) values (?,?)""", (exid,used_file))]
+            self.db.execute("""insert into execution_use(execution,file) 
+                               values (?,?)""", (ex.id,used_file))
         self.db.commit()
         return exid
+
+    def _insert_file(self, ex, exid, filename, description):
+        self.db.execute("""insert into file(external_name,repository_name,
+                                            description,origin,origin_value) 
+                           values (?,importfile(?),?,?,?)""",
+                        (filename,
+                         os.path.abspath(os.path.join(ex.working_directory,filename)),
+                         description, 'execution', exid))
+        return self.db.execute("""select last_insert_rowid()""").fetchone()[0]
+
+    def _rename_in_repository(self, fileid, new_repository_name):
+        old_target_name = self.db.execute("""select repository_name from file
+                                             where id=?""", (fileid,)).fetchone()[0]
+        self.db.execute("""drop trigger prevent_repository_name_change""")
+        self.db.execute("""update file set repository_name=? where id=?""",
+                        (new_repository_name, fileid))
+        self.db.execute("""CREATE TRIGGER prevent_repository_name_change
+                           BEFORE UPDATE ON file
+                           FOR EACH ROW WHEN (OLD.repository_name != NEW.repository_name) BEGIN
+                           SELECT RAISE(FAIL, 'Cannot change the repository name of a file.');
+                           END""")
+        shutil.move(os.path.join(self.file_path, old_target_name),
+                    os.path.join(self.file_path, new_repository_name))
+
+    def _associate_file(self, thisid, targetid, template):
+        # Make the filename in the repository match this association
+        raw_name = self.db.execute("""select repository_name from file where id=?""", 
+                                   (targetid,)).fetchone()[0]
+        new_target_name = template % raw_name
+        self._rename_in_repository(thisid, new_target_name)
+        self.associate_file(thisid, targetid, template)
 
     def search_files(self, with_text=None, older_than=None, newer_than=None, source=None):
         """Find files matching given criteria in the LIMS.
@@ -1133,6 +1201,11 @@ class MiniLIMS(object):
         """Delete a file from the repository."""
         fileid = self.resolve_alias(file_or_alias)
         try:
+            try:
+                for (f,t) in self.associated_files_of(fileid):
+                    self.delete_file(f)
+            except ValueError, v:
+                pass
             sql = "select repository_name from file where id = ?"
             [repository_name] = [x for (x,) in self.db.execute(sql, (fileid,))]
             sql = "delete from file where id = ?"
@@ -1141,11 +1214,6 @@ class MiniLIMS(object):
             sql = "delete from file_alias where file=?"
             self.db.execute(sql, (fileid,)).fetchone()
             self.db.commit()
-            try:
-                for (f,t) in self.associated_files_of(fileid):
-                    self.delete_file(f)
-            except ValueError, v:
-                pass
         except ValueError:
             raise ValueError("No such file id " + str(fileid))
 

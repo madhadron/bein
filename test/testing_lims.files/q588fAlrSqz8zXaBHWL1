@@ -201,10 +201,8 @@ class TestAssociatePreservesFilenames(TestCase):
             hilda_name = M.fetch_file(hilda_id)['repository_name']
             self.assertEqual("%s.meep" % boris_name, hilda_name)
         finally:
-            try:
-                M.delete_execution(ex.id)
-            except:
-                pass
+            pass
+#            M.delete_execution(ex.id)
 
     def test_associate_with_id(self):
         try:
@@ -217,34 +215,8 @@ class TestAssociatePreservesFilenames(TestCase):
             fid_name = M.fetch_file(fid)['repository_name']
             self.assertEqual("%s.meep" % fid_name, hilda_name)
         finally:
-            try:
-                M.delete_execution(ex.id)
-                M.delete_file(fid)
-            except:
-                pass
-
-    def test_hierarchical_association(self):
-        try:
-            with execution(M) as ex:
-                touch(ex, "a")
-                touch(ex, "b")
-                touch(ex, "c")
-                ex.add("a")
-                ex.add("b", associate_to_filename="a", template="%s.step")
-                ex.add("c", associate_to_filename="b", template="%s.step")
-            a_id = M.search_files(source=('execution',ex.id), with_text='a')[0]
-            b_id = M.search_files(source=('execution',ex.id), with_text='b')[0]
-            c_id = M.search_files(source=('execution',ex.id), with_text='c')[0]
-            a_name = M.fetch_file(a_id)['repository_name']
-            b_name = M.fetch_file(b_id)['repository_name']
-            c_name = M.fetch_file(c_id)['repository_name']
-            self.assertEqual("%s.step" % a_name, b_name)
-            self.assertEqual("%s.step.step" % a_name, c_name)
-        finally:
-            try:
-                M.delete_execution(ex.id)
-            except:
-                pass
+            M.delete_execution(ex.id)
+            M.delete_file(fid)
 
 def test_given(tests):
     module = sys.modules[__name__]
