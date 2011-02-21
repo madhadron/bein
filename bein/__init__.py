@@ -205,9 +205,14 @@ class program(object):
 
 
         d = self.gen_args(*args, **kwargs)
-        sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=stdout,
-                              stderr=stderr,
-                              cwd = ex.working_directory)
+
+        try:
+            sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=stdout,
+                                  stderr=stderr,
+                                  cwd = ex.working_directory)
+        except OSError, ose:
+            raise ValueError("Program %s does not seem to exist in your $PATH." % d['arguments'][0])
+
         return_code = sp.wait()
         if isinstance(stdout,file):
             stdout_value = None
@@ -304,15 +309,22 @@ class program(object):
             def wait(self):
                 v.wait()
                 ex.report(self.program_output)
-                return self.return_value
+                if isinstance(f.return_value, Exception):
+                    raise self.return_value
+                else:
+                    return self.return_value
         f = Future()
         v = threading.Event()
         def g():
             try:
-                sp = subprocess.Popen(d["arguments"], bufsize=-1, 
-                                      stdout=stdout,
-                                      stderr=stderr,
-                                      cwd = ex.working_directory)
+                try:
+                    sp = subprocess.Popen(d["arguments"], bufsize=-1, 
+                                          stdout=stdout,
+                                          stderr=stderr,
+                                          cwd = ex.working_directory)
+                except OSError, ose:
+                    raise ValueError("Program %s does not seem to exist in your $PATH." % d['arguments'][0])
+
                 return_code = sp.wait()
                 if isinstance(stdout,file):
                     stdout_value = None
@@ -335,13 +347,12 @@ class program(object):
                     else:
                         f.return_value = z
                 v.set()
-            except:
-                f.return_value = None
+            except Exception, e:
+                f.return_value = e
                 v.set()
-                raise
         a = threading.Thread(target=g)
         a.start()
-        return(f)
+        return f
 
     def lsf(self, ex, *args, **kwargs):
         """Deprecated.  Use nonblocking(via="lsf") instead."""
