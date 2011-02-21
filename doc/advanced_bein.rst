@@ -105,6 +105,16 @@ If the file we want to associate to was created in the same execution, then it a
         ex.add("pqrs.rev.1.ebwt", associate_to_filename="pqrs", template="%s.rev.1.ebwt")
         ex.add("pqrs.rev.2.ebwt", associate_to_filename="pqrs", template="%s.rev.2.ebwt")
 
+Bowtie indices tend to be large and read only, so we don't want to copy them into our working directory every time.  When you associate files as part of the ``ex.add`` command, they have the association naming scheme in the MiniLIMS repository.  Thus, if get the path to the file you added under the name ``"pqrs"`` in the previous example, you could use it as the bowtie index path *in the LIMS*, without having to copy it.  If that file were added with file 53, you can call ``ex.lims.path_to_file(53)`` instead of ``ex.use(53)``.  The path it returns is a fully functional bowtie index, with the files properly named.
+
+This special naming only happens when the association is specified in ``ex.add``.  If you associate files manually, their names aren't changed.  You can do hierarchical associations like this and the naming will all be correct; so the following works as you would expect::
+
+    with execution(M) as ex:
+        ...code that creates a, b, and c
+	ex.add("a")
+        ex.add("b", associate_to_filename="a", template="%s.step")
+        ex.add("c", associate_to_filename="b", template="%s.step")
+
 See also "File associations" in :ref:`minilims`.
 
 Parallel executions
@@ -129,7 +139,7 @@ But in the list comprehension, each bowtie is run one after another.  The parall
         samfiles = [f.wait() for f in futures]
         ...
 
-Every binding created with ``@program`` has a ``nonblocking`` method.  The ``nonblocking`` method returns an object called a "future" instead of the normal value.  The program is started in a separate thread and the execution continues.  If you are working on a cluster using the LSF batch submission system, you can use ``lsf`` in place of ``nonblocking`` to have the program run via LSF instead of locally.  Its semantics are identical.
+Every binding created with ``@program`` has a ``nonblocking`` method.  The ``nonblocking`` method returns an object called a "future" instead of the normal value.  The program is started in a separate thread and the execution continues.  If you are working on a cluster using the LSF batch submission system, you can use the keyword argument ``via`` to control how the background jobs are executed.  The default is ``via="local"``, which runs the jobs as processes on the same machine.  You can also use ``via="lsf"`` to submit the jobs via the LSF batch queue on clusters running this system.
 
 When you need the value from the program, call the method ``wait`` on the future.  ``wait`` blocks until the program finishes, then returns the value that would have been returned if you had called the program without ``nonblocking``.  In the example above, ``futures`` is a list of futures, one for each instance of bowtie.  Bowtie runs in parallel on all three files, and when all three have finished, the list of their output files is assigned to ``samfiles``.
 
@@ -147,7 +157,50 @@ The example shows a common idiom for writing parallel executions in bein: use li
 
 Note that all the instances of bowtie will finish before any instance of ``sam_to_bam`` begin.  If one of the instances of bowtie finishes much earlier than the other, one of the computer's processors may sit idle until the other instances of bowtie finish.  To avoid this, divide your work evenly among the parallel jobs.
 
-The ``nonblocking`` and ``lsf`` methods only exist on objects created with the ``@program`` decorator.  This includes some, but not all, of the functions in :mod:`bein.util`.  Check the source code for a function to see if you can call it in parallel.
+The ``nonblocking`` method only exists on objects created with the ``@program`` decorator.  This includes some, but not all, of the functions in :mod:`bein.util`.  Check the source code for a function to see if you can call it in parallel.
+
+Capturing ``stdout`` and ``stderr``
+***********************************
+
+Some programs, such as ``cat``, do not let you specify where to write their output.  They always write to ``stdout``.  In order to capture this, Bein lets you redirect ``stdout`` to a file with the ``stdout`` keyword argument.  If you have a program ``p`` and you want it to write its ``stdout`` to a file named ``boris``, you would write::
+
+    with execution(M) as ex:
+        p(ex, arg, ..., stdout="boris")
+
+Every method of a binding created with ``@program`` accepts these arguments, so you could just as easily have called ``p.nonblocking``.
+
+Everywhere you could use ``stdout``, you can also use the keyword argument ``stderr`` to redirect that stream to a file.
+
+When binding a program that must have its ``stdout`` redirected, it is best to write a wrapper around it so that it feels like other, normal program bindings.  For example, for ``cat`` (which is not actually in the library because it's useless inside Bein) we would write::
+
+    @program
+    def _cat(input_file):
+        return {'arguments': ['cat',input_file],
+                'return_value': None}
+    
+    def cat(ex, input_file, filename=None):
+        if filename == None:
+            filename = unique_filename_in()
+        _cat(ex, input_file, stdout=filename)
+        return filename
+
+Unfortunately, you have to add your own ``nonblocking`` binding by hand, as in::
+
+    def _cat_nonblocking(ex, input_file, filename=None):
+        if filename == None:
+            filename = unique_filename_in()
+        f = _cat.nonblocking(ex, input_file, stdout=filename)
+        class Future(object):
+            def __init__(self, f):
+                self.future = f
+            def wait(self):
+                self.future.wait()
+                return filename
+        return Future(f)
+    
+    cat.nonblocking = _cat_nonblocking
+
+You may also want to use these keyword arguments if you expect enormous amounts of data on ``stdout`` or ``stderr``, more than can be reasonably bassed back in a ``ProgramOutput`` object.
 
 Writing robust program bindings
 *******************************
@@ -164,7 +217,7 @@ The tutorial's section on :ref:`program-binding` covers all the mechanics of wri
     Program bindings aren't meant for interactive shell use, so there is no reason not to make them easy to read.  Use 'copy' instead of 'cp,' 'antibody' instead of 'ab,' etc.
 
 **Parse in paranoia.**
-    ``wc`` formats its output slightly differently on different platforms.  The ``lsf`` method of a program binding adds a large header describing the batch job to the beginning of ``stdout`` before getting to the actual output of the program.  Parse the output knowing that these things happen.  For instance, to parse the output of ``wc -l``, the naive function would be::
+    ``wc`` formats its output slightly differently on different platforms.  Some programs might have additional headers on some systems.  Some batch processing systems also add headers to the output of a program.  Parse the output knowing that these things happen.  For instance, to parse the output of ``wc -l``, the naive function would be::
 
         def parse_output(p):
             m = re.search(r'(\d+)', ''.join(p.stdout))

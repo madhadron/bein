@@ -314,7 +314,7 @@ Let's bind ``wc -l`` as we discussed above.  The output of ``wc -l`` is a line c
     @program
     def count_lines(filename):
        def parse_output(p):
-            m = re.search(r'^\s+(\d+)\s+' + filename, ''.join(p.stdout))
+            m = re.search(r'^\s*(\d+)\s+' + filename, ''.join(p.stdout))
             return int(m.groups()[0])
        return {'arguments': ["wc","-l",filename],
                'return_value': parse_output}
