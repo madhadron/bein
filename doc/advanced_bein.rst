@@ -129,7 +129,7 @@ But in the list comprehension, each bowtie is run one after another.  The parall
         samfiles = [f.wait() for f in futures]
         ...
 
-Every binding created with ``@program`` has a ``nonblocking`` method.  The ``nonblocking`` method returns an object called a "future" instead of the normal value.  The program is started in a separate thread and the execution continues.  If you are working on a cluster using the LSF batch submission system, you can use ``lsf`` in place of ``nonblocking`` to have the program run via LSF instead of locally.  Its semantics are identical.
+Every binding created with ``@program`` has a ``nonblocking`` method.  The ``nonblocking`` method returns an object called a "future" instead of the normal value.  The program is started in a separate thread and the execution continues.  If you are working on a cluster using the LSF batch submission system, you can use the keyword argument ``via`` to control how the background jobs are executed.  The default is ``via="local"``, which runs the jobs as processes on the same machine.  You can also use ``via="lsf"`` to submit the jobs via the LSF batch queue on clusters running this system.
 
 When you need the value from the program, call the method ``wait`` on the future.  ``wait`` blocks until the program finishes, then returns the value that would have been returned if you had called the program without ``nonblocking``.  In the example above, ``futures`` is a list of futures, one for each instance of bowtie.  Bowtie runs in parallel on all three files, and when all three have finished, the list of their output files is assigned to ``samfiles``.
 
@@ -147,7 +147,7 @@ The example shows a common idiom for writing parallel executions in bein: use li
 
 Note that all the instances of bowtie will finish before any instance of ``sam_to_bam`` begin.  If one of the instances of bowtie finishes much earlier than the other, one of the computer's processors may sit idle until the other instances of bowtie finish.  To avoid this, divide your work evenly among the parallel jobs.
 
-The ``nonblocking`` and ``lsf`` methods only exist on objects created with the ``@program`` decorator.  This includes some, but not all, of the functions in :mod:`bein.util`.  Check the source code for a function to see if you can call it in parallel.
+The ``nonblocking`` method only exists on objects created with the ``@program`` decorator.  This includes some, but not all, of the functions in :mod:`bein.util`.  Check the source code for a function to see if you can call it in parallel.
 
 Capturing ``stdout`` and ``stderr``
 ***********************************
@@ -207,7 +207,7 @@ The tutorial's section on :ref:`program-binding` covers all the mechanics of wri
     Program bindings aren't meant for interactive shell use, so there is no reason not to make them easy to read.  Use 'copy' instead of 'cp,' 'antibody' instead of 'ab,' etc.
 
 **Parse in paranoia.**
-    ``wc`` formats its output slightly differently on different platforms.  The ``lsf`` method of a program binding adds a large header describing the batch job to the beginning of ``stdout`` before getting to the actual output of the program.  Parse the output knowing that these things happen.  For instance, to parse the output of ``wc -l``, the naive function would be::
+    ``wc`` formats its output slightly differently on different platforms.  Some programs might have additional headers on some systems.  Some batch processing systems also add headers to the output of a program.  Parse the output knowing that these things happen.  For instance, to parse the output of ``wc -l``, the naive function would be::
 
         def parse_output(p):
             m = re.search(r'(\d+)', ''.join(p.stdout))

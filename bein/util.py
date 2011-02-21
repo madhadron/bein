@@ -317,8 +317,9 @@ def deepmap(f, st):
         return f(st)
 
 def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
-    """Identical to parallel_bowtie, but runs programs via LSF."""
-    return parallel_bowtie(ex, index, reads, n_lines, bowtie_args, add_nh_flags, via='lsf')
+    """Deprecated.  Use parallel_bowtie with ``via="lsf"`` instead."""
+    raise DeprecationWarning("parallel_bowtie_lsf is deprecated.  Use parallel_bowtie with via='lsf' instead")
+    # return parallel_bowtie(ex, index, reads, n_lines, bowtie_args, add_nh_flags, via='lsf')
 
 @program
 def external_add_nh_flag(samfile):

@@ -167,13 +167,17 @@ class program(object):
             a.wait()
             b.wait()
 
-    If you are on a system using the LSF batch submission system, you
-    can also call the ``lsf`` method with exactly the same arguments as
-    nonblocking to run the program as a batch job::
+    By default, ``nonblocking`` runs local processes, but you can
+    control how it runs its processes with the ``via`` keyword
+    argument.  For example, on systems using the LSF batch submission
+    system,s you can run commands via batch submission by passing the
+    ``via`` argument the value ``"lsf"``::
 
         with execution(lims) as ex:
-            a = touch.lsf(ex, "myfile1")
+            a = touch.nonblocking(ex, "myfile1", via="lsf")
             a.wait()
+
+    You can force local execution with ``via="local"``.
 
     Some programs do not accept an output file as an argument and only
     write to ``stdout``.  Alternately, you might need to capture
@@ -291,9 +295,10 @@ class program(object):
             return self._lsf(ex, *args, **kwargs)
 
     def _local(self, ex, *args, **kwargs):
-        """Like ``nonblocking``, but always runs locally.
+        """Method called by ``nonblocking`` for running locally.
 
-        If you need to pass a ``via`` keyword argument to your function, you will have to call this method directly.
+        If you need to pass a ``via`` keyword argument to your
+        function, you will have to call this method directly.
         """
         if kwargs.has_key('stdout'):
             stdout = open(kwargs['stdout'],'w')
@@ -367,7 +372,7 @@ class program(object):
         return self._lsf(ex, *args, **kwargs)
 
     def _lsf(self, ex, *args, **kwargs):
-        """Like ``nonblocking``, but always runs via LSF."""
+        """Method called by ``nonblocking`` to run via LSF."""
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args, **kwargs)
@@ -556,8 +561,8 @@ def execution(lims = None, description="", remote_working_directory=None):
     run than on the nodes from which jobs are submitted.  For
     instance, if you are working in /scratch/abc on your local node,
     the worker nodes might mount the same directory as
-    /nfs/boris/scratch/abc.  In this case, the lsf method of bound
-    programs would not work correctly.
+    /nfs/boris/scratch/abc.  In this case, running programs via LSF
+    would not work correctly.
 
     If this is the case, you can pass the equivalent directory on
     worker nodes as *remote_working_directory*.  In the example above,
