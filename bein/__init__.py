@@ -174,6 +174,13 @@ class program(object):
         with execution(lims) as ex:
             a = touch.lsf(ex, "myfile1")
             a.wait()
+
+    Some programs do not accept an output file as an argument and only
+    write to ``stdout``.  Alternately, you might need to capture
+    ``stderr`` to a file.  All the methods of ``@program`` accept
+    keyword arguments ``stdout`` and ``stderr`` to specify files to
+    write these streams to.  If they are omitted, then both streams
+    are captured and returned in the ``ProgramOutput`` object.
     """
     def __init__(self, gen_args):
         self.gen_args = gen_args

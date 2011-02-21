@@ -41,6 +41,32 @@ from bein import *
 
 # Basic utilities
 
+# 'cat' is used only as an example; it is useless in Bein.
+# @program
+# def _cat(input_file):
+#     return {'arguments': ['cat',input_file],
+#             'return_value': None}
+
+# def cat(ex, input_file, filename=None):
+#     if filename == None:
+#         filename = unique_filename_in()
+#     _cat(ex, input_file, stdout=filename)
+#     return filename
+
+# def _cat_nonblocking(ex, input_file, filename=None):
+#     if filename == None:
+#         filename = unique_filename_in()
+#     f = _cat.nonblocking(ex, input_file, stdout=filename)
+#     class Future(object):
+#         def __init__(self, f):
+#             self.future = f
+#         def wait(self):
+#             self.future.wait()
+#             return filename
+#     return Future(f)
+
+# cat.nonblocking = _cat_nonblocking
+
 
 def pause():
     """Pause until the user hits Return."""

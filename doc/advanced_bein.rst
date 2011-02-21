@@ -149,6 +149,49 @@ Note that all the instances of bowtie will finish before any instance of ``sam_t
 
 The ``nonblocking`` and ``lsf`` methods only exist on objects created with the ``@program`` decorator.  This includes some, but not all, of the functions in :mod:`bein.util`.  Check the source code for a function to see if you can call it in parallel.
 
+Capturing ``stdout`` and ``stderr``
+***********************************
+
+Some programs, such as ``cat``, do not let you specify where to write their output.  They always write to ``stdout``.  In order to capture this, Bein lets you redirect ``stdout`` to a file with the ``stdout`` keyword argument.  If you have a program ``p`` and you want it to write its ``stdout`` to a file named ``boris``, you would write::
+
+    with execution(M) as ex:
+        p(ex, arg, ..., stdout="boris")
+
+Every method of a binding created with ``@program`` accepts these arguments, so you could just as easily have called ``p.nonblocking``.
+
+Everywhere you could use ``stdout``, you can also use the keyword argument ``stderr`` to redirect that stream to a file.
+
+When binding a program that must have its ``stdout`` redirected, it is best to write a wrapper around it so that it feels like other, normal program bindings.  For example, for ``cat`` (which is not actually in the library because it's useless inside Bein) we would write::
+
+    @program
+    def _cat(input_file):
+        return {'arguments': ['cat',input_file],
+                'return_value': None}
+    
+    def cat(ex, input_file, filename=None):
+        if filename == None:
+            filename = unique_filename_in()
+        _cat(ex, input_file, stdout=filename)
+        return filename
+
+Unfortunately, you have to add your own ``nonblocking`` binding by hand, as in::
+
+    def _cat_nonblocking(ex, input_file, filename=None):
+        if filename == None:
+            filename = unique_filename_in()
+        f = _cat.nonblocking(ex, input_file, stdout=filename)
+        class Future(object):
+            def __init__(self, f):
+                self.future = f
+            def wait(self):
+                self.future.wait()
+                return filename
+        return Future(f)
+    
+    cat.nonblocking = _cat_nonblocking
+
+You may also want to use these keyword arguments if you expect enormous amounts of data on ``stdout`` or ``stderr``, more than can be reasonably bassed back in a ``ProgramOutput`` object.
+
 Writing robust program bindings
 *******************************
 

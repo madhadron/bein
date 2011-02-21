@@ -71,7 +71,24 @@ class TestAddNhFlag(TestCase):
             g = add_nh_flag('../test_data/mapped.sam')
             self.assertEqual(md5sum(ex, f), md5sum(ex, g))
 
+# 'cat' is used only as an example.  It is useless in Bein.
+# class TestCat(TestCase):
+#     def test_cat(self):
+#         with execution(None) as ex:
+#             with open('boris','w') as inp:
+#                 inp.write("a\nb\n")
+#             f = cat(ex, "boris")
+#             n = count_lines(ex, f)
+#         self.assertEqual(n, 2)
 
+#     def test_cat_nonblocking(self):
+#         with execution(None) as ex:
+#             with open('boris','w') as inp:
+#                 inp.write("a\nb\n")
+#             future = cat.nonblocking(ex, "boris")
+#             f = future.wait()
+#             n = count_lines(ex, f)
+#         self.assertEqual(n, 2)
 
 if __name__ == '__main__':
     main()
