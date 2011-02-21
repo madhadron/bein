@@ -151,7 +151,20 @@ class TestStdoutStderrRedirect(TestCase):
         finally:
             M.delete_execution(ex.id)
 
+class TestNoSuchProgramError(TestCase):
+    @program
+    def nonexistent():
+        return {"arguments": ["meepbarf","hilda"],
+                "return_value": None}
+    
+    def test_nonexistent(self):
+        with execution(None) as ex:
+            self.assertRaises(ValueError, self.nonexistent, ex)
 
+    def test_nonexistent_local(self):
+        with execution(None) as ex:
+            f = self.nonexistent.nonblocking(ex, via="local")
+            self.assertRaises(ValueError, f.wait)
 
 def test_given(tests):
     module = sys.modules[__name__]
