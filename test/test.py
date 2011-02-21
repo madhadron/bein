@@ -166,6 +166,27 @@ class TestNoSuchProgramError(TestCase):
             f = self.nonexistent.nonblocking(ex, via="local")
             self.assertRaises(ValueError, f.wait)
 
+class TestImmutabilityDropped(TestCase):
+    def test_immutability_dropped(self):
+        executions = []
+        with execution(M) as ex:
+            touch(ex, "boris")
+            ex.add("boris")
+            exid1 = ex.id
+        borisid = M.search_files(source=('execution',ex.id))[0]
+        self.assertFalse(M.fetch_file(borisid)['immutable'])
+    
+        with execution(M) as ex:
+            ex.use(borisid)
+        exid2 = ex.id
+        self.assertTrue(M.fetch_file(borisid)['immutable'])
+
+        M.delete_execution(exid2)
+        self.assertFalse(M.fetch_file(borisid)['immutable'])
+
+        M.delete_execution(exid1)
+        self.assertEqual(M.search_files(source=('execution',exid1)), [])
+
 def test_given(tests):
     module = sys.modules[__name__]
     if tests == None:

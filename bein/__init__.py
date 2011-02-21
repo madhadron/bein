@@ -1164,6 +1164,8 @@ class MiniLIMS(object):
                             (execution_id,))
             self.db.execute("delete from execution where id = ?", 
                             (execution_id,))
+            self.db.execute("delete from execution_use where execution=?",
+                            (execution_id,))
             self.db.commit()
         except ValueError, v:
             raise ValueError("No such execution id " + str(execution_id) + ": " + v.message)
