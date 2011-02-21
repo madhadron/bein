@@ -49,5 +49,7 @@
 
   .. autofunction:: sort_bam(execution, bamfile)
 
-  .. autofunction:: split_by_readname
+  .. autofunction:: sort_bam_by_read(execution, bamfile)
+
+  .. autofunction:: read_sets
 

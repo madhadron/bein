@@ -361,6 +361,31 @@ def sort_bam_by_read(bamfile):
             'return_value': filename + '.bam'}
 
 
+def read_sets(reads):
+    """Groups the alignments in a BAM file by read.
+
+    *reads* should be an iterator over reads, such as the object
+     returned by pysam.Samfile.  The SAM/BAM file must be sorted by
+     read.  ``read_sets`` removes all unmapped reads, and returns an
+     iterator over lists of all AlignedRead objects consisting of the
+     same read.
+    """
+    last_read = None
+    for r in reads:
+        if r.rname == -1 or r.is_unmapped:
+            pass
+        elif r.qname != last_read:
+            if last_read != None:
+                yield accum
+            accum = [r]
+            last_read = r.qname
+        else:
+            accum.append(r)
+    if last_read != None:
+        # We have to check, since if samfile
+        # has no alignments, accum is never defined.
+        yield accum    
+
 @program
 def index_bam(bamfile):
     """Index a sorted BAM file.
@@ -391,28 +416,6 @@ def merge_bam(files):
         return {'arguments': ['samtools','merge',filename] + files,
                 'return_value': filename}
 
-def split_by_readname(samfile):
-    """(Deprecated) Return an iterator over the reads in *samfile* grouped by read name.
-
-    The SAM file produced by bowtie is sorted by read name.  Often we
-    want to work with all of the alignments of a particular read at
-    once.  This function turns the flat list of reads into a list of
-    lists of reads, where each sublist has the same read name.
-    """
-    raise DeprecationWarning("Use itertools.groupby instead.")
-    last_read = None
-    for r in samfile:
-        if r.qname != last_read:
-            if last_read != None:
-                yield accum
-            accum = [r]
-            last_read = r.qname
-        else:
-            accum.append(r)
-    if last_read != None:
-        # We have to check, since if samfile
-        # has no alignments, accum is never defined.
-        yield accum
 
 try:
     import pysam
