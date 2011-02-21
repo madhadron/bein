@@ -105,6 +105,16 @@ If the file we want to associate to was created in the same execution, then it a
         ex.add("pqrs.rev.1.ebwt", associate_to_filename="pqrs", template="%s.rev.1.ebwt")
         ex.add("pqrs.rev.2.ebwt", associate_to_filename="pqrs", template="%s.rev.2.ebwt")
 
+Bowtie indices tend to be large and read only, so we don't want to copy them into our working directory every time.  When you associate files as part of the ``ex.add`` command, they have the association naming scheme in the MiniLIMS repository.  Thus, if get the path to the file you added under the name ``"pqrs"`` in the previous example, you could use it as the bowtie index path *in the LIMS*, without having to copy it.  If that file were added with file 53, you can call ``ex.lims.path_to_file(53)`` instead of ``ex.use(53)``.  The path it returns is a fully functional bowtie index, with the files properly named.
+
+This special naming only happens when the association is specified in ``ex.add``.  If you associate files manually, their names aren't changed.  You can do hierarchical associations like this and the naming will all be correct; so the following works as you would expect::
+
+    with execution(M) as ex:
+        ...code that creates a, b, and c
+	ex.add("a")
+        ex.add("b", associate_to_filename="a", template="%s.step")
+        ex.add("c", associate_to_filename="b", template="%s.step")
+
 See also "File associations" in :ref:`minilims`.
 
 Parallel executions
