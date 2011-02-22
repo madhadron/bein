@@ -55,39 +55,37 @@ class TestBowtie(TestCase):
             sam = bam_to_sam(ex, bam)
             new_sam = remove_lines_matching(ex, '@PG', sam)
             new_bam = sam_to_bam(ex, new_sam)
-            self.assertEqual(md5sum(ex, new_bam), 'find right md5sum')
+            m = md5sum(ex, new_bam)
+        self.assertEqual(m, 'find right md5sum')
 
     @skipIf(not_vital_it, "Not running on VITAL-IT.")
     def test_parallel_bowtie_lsf_with_nh_flags(self):
-        if hostname_contains('vital-it.ch'):
-            with execution(None) as ex:
-                bam = parallel_bowtie(ex, '../test_data/selected_transcripts', 
-                                      '../test_data/reads.raw', n_lines=250,
-                                      add_nh_flags=True, via='lsf')
-                sam = bam_to_sam(ex, bam)
-                new_sam = remove_lines_matching(ex, '@PG', sam)
-                new_bam = sam_to_bam(ex, new_sam)
-                self.assertEqual(md5sum(ex, new_bam), '7b7c270a3980492e82591a785d87538f')
-        else:
-            print >>sys.stderr, "Not running test_parallel_bowtie_lsf because we're not on VITAL-IT"
+        with execution(None) as ex:
+            bam = parallel_bowtie(ex, '../test_data/selected_transcripts', 
+                                  '../test_data/reads.raw', n_lines=250,
+                                  add_nh_flags=True, via='lsf')
+            sam = bam_to_sam(ex, bam)
+            new_sam = remove_lines_matching(ex, '@PG', sam)
+            new_bam = sam_to_bam(ex, new_sam)
+            m = md5sum(ex, new_bam)
+        self.assertEqual(m, '7b7c270a3980492e82591a785d87538f')
+
 
 class TestAddNhFlag(TestCase):
     @skipIf(no_pysam, "No PySam")
     def test_internal_add_nh_flag(self):
         with execution(None) as ex:
             f = add_nh_flag('../test_data/mapped.sam')
-            self.assertEqual(md5sum(ex, f), '50798b19517575533b8ccae5b1369a3e')
+            m = md5sum(ex, f)
+        self.assertEqual(m, '50798b19517575533b8ccae5b1369a3e')
 
     @skipIf(no_pysam, "No PySam")
     def test_external_add_nh_flag(self):
-        try:
-            import pysam
-            with execution(None) as ex:
-                f = external_add_nh_flag(ex, '../test_data/mapped.sam')
-                g = add_nh_flag('../test_data/mapped.sam')
-                self.assertEqual(md5sum(ex, f), md5sum(ex, g))
-        except:
-            print >>sys.stderr, "PySam not found; skipping."
+        with execution(None) as ex:
+            f = external_add_nh_flag(ex, '../test_data/mapped.sam')
+            g = add_nh_flag('../test_data/mapped.sam')
+            m = md5sum(ex, f)
+        self.assertEqual(m, md5sum(ex, g))
 
 # 'cat' is used only as an example.  It is useless in Bein.
 # class TestCat(TestCase):

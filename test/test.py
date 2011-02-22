@@ -2,12 +2,13 @@ import socket
 import re
 import sys
 import random
-from unittest import TestCase, TestSuite, main, TestLoader
+from unittest2 import TestCase, TestSuite, main, TestLoader, skipIf
 
 from bein import *
 from bein.util import touch
 
 M = MiniLIMS("testing_lims")
+
 
 def hostname_contains(pattern):
     hostname = socket.gethostbyaddr(socket.gethostname())[0]
@@ -15,6 +16,11 @@ def hostname_contains(pattern):
         return False
     else:
         return True
+
+if hostname_contains('vital-it.ch'):
+    not_vital_it = False
+else:
+    not_vital_it = True
 
 @program
 def count_lines(filename):
@@ -44,16 +50,14 @@ class TestProgramBinding(TestCase):
             self.assertEqual(str(q.__class__), "<class 'bein.Future'>")
             self.assertEqual(q.wait(), 3)
 
+    @skipIf(not_vital_it, "Not on VITAL-IT.")
     def test_lsf_works(self):
-        if hostname_contains('vital-it.ch'):
-            with execution(None) as ex:
-                with open('boris','w') as f:
-                    f.write("This is a test\nof the emergency broadcast\nsystem.\n")
-                q = count_lines._lsf(ex, 'boris')
-                self.assertEqual(str(q.__class__), "<class 'bein.Future'>")
-                self.assertEqual(q.wait(), 3)            
-        else:
-            pass
+        with execution(None) as ex:
+            with open('boris','w') as f:
+                f.write("This is a test\nof the emergency broadcast\nsystem.\n")
+            q = count_lines._lsf(ex, 'boris')
+            self.assertEqual(str(q.__class__), "<class 'bein.Future'>")
+            self.assertEqual(q.wait(), 3)            
 
     def test_nonblocking_with_via_local(self):
         with execution(None) as ex:
@@ -63,17 +67,14 @@ class TestProgramBinding(TestCase):
             self.assertEqual(str(q.__class__), "<class 'bein.Future'>")
             self.assertEqual(q.wait(), 3)
 
+    @skipIf(not_vital_it, "Not on VITAL-IT")
     def test_nonblocking_with_via_lsf(self):
-        if hostname_contains('vital-it.ch'):
-            with execution(None) as ex:
-                with open('boris','w') as f:
-                    f.write("This is a test\nof the emergency broadcast\nsystem.\n")
-                q = count_lines.nonblocking(ex, 'boris', via='lsf')
-                self.assertEqual(str(q.__class__), "<class 'bein.Future'>")
-                self.assertEqual(q.wait(), 3)            
-        else:
-            print >>sys.stderr, "Not running test_parallel_bowtie_lsf because we're not on VITAL-IT"
-
+        with execution(None) as ex:
+            with open('boris','w') as f:
+                f.write("This is a test\nof the emergency broadcast\nsystem.\n")
+            q = count_lines.nonblocking(ex, 'boris', via='lsf')
+            self.assertEqual(str(q.__class__), "<class 'bein.Future'>")
+            self.assertEqual(q.wait(), 3)            
 
 class TestUniqueFilenameIn(TestCase):
     def test_state_determines_filename(self):

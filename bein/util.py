@@ -464,7 +464,7 @@ try:
         else:
             outname = out
         outfile = pysam.Samfile(outname, "wb", template=infile)
-        for readset in split_by_readname(infile):
+        for readset in read_sets(infile):
             nh = len(readset)
             for read in readset:
                 if (read.is_unmapped):
