@@ -947,7 +947,7 @@ class MiniLIMS(object):
 
         for used_file in set(ex.used_files):
             self.db.execute("""insert into execution_use(execution,file) 
-                               values (?,?)""", (ex.id,used_file))
+                               values (?,?)""", (exid,used_file))
         self.db.commit()
         return exid
 

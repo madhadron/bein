@@ -5,3 +5,4 @@ build
 MANIFEST
 dist
 _build
+test/testing_lims*

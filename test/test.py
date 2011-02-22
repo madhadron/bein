@@ -172,12 +172,14 @@ class TestImmutabilityDropped(TestCase):
         with execution(M) as ex:
             touch(ex, "boris")
             ex.add("boris")
-            exid1 = ex.id
+
+        exid1 = ex.id
         borisid = M.search_files(source=('execution',ex.id))[0]
         self.assertFalse(M.fetch_file(borisid)['immutable'])
     
         with execution(M) as ex:
             ex.use(borisid)
+
         exid2 = ex.id
         self.assertTrue(M.fetch_file(borisid)['immutable'])
 
