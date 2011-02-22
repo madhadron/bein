@@ -30,7 +30,7 @@ There are three ways to install bein:
 
 #. The simplest way is to fetch and install bein automatically from the Python Package Index.  Just run::
 
-    sudo easy_install bein
+    sudo pip install bein
 
 #. Download a compressed archive of the source code, and install it by hand.  In the directory you downloaded ``bein-X.tar.gz``, run the commands::
 
