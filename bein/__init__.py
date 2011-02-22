@@ -406,26 +406,6 @@ class program(object):
         f = Future()
         v = threading.Event()
         def g():
-<<<<<<< HEAD
-            nullout = open(os.path.devnull, 'w')
-            sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
-            return_code = sp.wait()
-            stdout = None
-            stderr = None
-            while not(os.path.exists(os.path.join(ex.working_directory, stdout_filename)) and
-                      os.path.exists(os.path.join(ex.working_directory, stderr_filename))):
-                pass # We need to wait until the files actually show up
-            with open(os.path.join(ex.working_directory,stdout_filename), 'r') as fo:
-                stdout = fo.readlines()
-            with open(os.path.join(ex.working_directory,stderr_filename), 'r') as fe:
-                stderr = fe.readlines()
-            f.program_output = ProgramOutput(return_code, sp.pid,
-                                             cmds, stdout, stderr)
-            if return_code == 0:
-                z = d["return_value"]
-                if callable(z):
-                    f.return_value = z(f.program_output)
-=======
             try:
                 nullout = open(os.path.devnull, 'w')
                 sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
@@ -444,7 +424,6 @@ class program(object):
                 if load_stderr:
                     with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
                         stderr = fe.readlines()
->>>>>>> 453ace62cb6bc6fc25447d3e2566b82cc05c2f8f
                 else:
                     stderr_value = None
 
