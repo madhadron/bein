@@ -85,7 +85,8 @@ class TestAddNhFlag(TestCase):
             f = external_add_nh_flag(ex, '../test_data/mapped.sam')
             g = add_nh_flag('../test_data/mapped.sam')
             m = md5sum(ex, f)
-        self.assertEqual(m, md5sum(ex, g))
+            m2 = md5sum(ex, g)
+        self.assertEqual(m, m2)
 
 # 'cat' is used only as an example.  It is useless in Bein.
 # class TestCat(TestCase):
