@@ -103,7 +103,7 @@ def touch(filename = None):
 @program
 def remove_lines_matching(pattern, filename):
     output_file = unique_filename_in()
-    return {'arguments': ['gawk',"""!/%s/ { print $0 > "%s" }""" % (pattern,output_file),
+    return {'arguments': ['awk',"""!/%s/ { print $0 > "%s" }""" % (pattern,output_file),
                           filename],
             'return_value': output_file}
     
@@ -112,10 +112,10 @@ def remove_lines_matching(pattern, filename):
 def md5sum(filename):
     """Calculate the MD5 sum of *filename* and return it as a string."""
     def parse_output(p):
-        m = re.search(r'^\s*([a-f0-9A-F]+)\s+' + filename + r'\s*$',
+        m = re.search(r'=\s*([a-f0-9A-F]+)\s*$',
                       ''.join(p.stdout))
         return m.groups()[-1] # in case of a weird line in LSF
-    return {"arguments": ["md5sum",filename],
+    return {"arguments": ["openssl","md5",filename],
             "return_value": parse_output}
 
         
@@ -152,9 +152,8 @@ def split_file(filename, n_lines = 1000, prefix = None, suffix_length = 3):
     if prefix == None:
         prefix = unique_filename_in()
     def extract_filenames(p):
-        return [re.search(r"creating file .(.+)'", x).groups()[0]
-                for x in p.stdout + p.stderr]
-    return {"arguments": ["split", "--verbose", "-a", str(suffix_length),
+        return [x for x in os.listdir('.') if x.startswith(prefix)]
+    return {"arguments": ["split", "-a", str(suffix_length),
                           "-l", str(n_lines), filename, prefix],
             "return_value": extract_filenames}
 
@@ -321,11 +320,15 @@ def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra",
     raise DeprecationWarning("parallel_bowtie_lsf is deprecated.  Use parallel_bowtie with via='lsf' instead")
     # return parallel_bowtie(ex, index, reads, n_lines, bowtie_args, add_nh_flags, via='lsf')
 
-@program
-def external_add_nh_flag(samfile):
-    outfile = unique_filename_in()
-    return {'arguments': ['add_nh_flag',samfile,outfile],
-            'return_value': outfile}
+try:
+    import pysam
+    @program
+    def external_add_nh_flag(samfile):
+        outfile = unique_filename_in()
+        return {'arguments': ['add_nh_flag',samfile,outfile],
+                'return_value': outfile}
+except:
+    print >>sys.stderr, "PySam not found.  Skipping external_add_nh_flag."
 
 ###############
 # BAM/SAM files
