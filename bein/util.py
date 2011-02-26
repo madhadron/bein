@@ -30,17 +30,42 @@ analysis of high throughput sequencing data, but if you have useful
 functions for a different domain, please contribute them.
 """
 
-from contextlib import contextmanager
 import pickle
-import pylab
 import re
 import sys
 import os
-from bein import *
-import pysam
 import threading
+from contextlib import contextmanager
+
+from bein import *
 
 # Basic utilities
+
+# 'cat' is used only as an example; it is useless in Bein.
+# @program
+# def _cat(input_file):
+#     return {'arguments': ['cat',input_file],
+#             'return_value': None}
+
+# def cat(ex, input_file, filename=None):
+#     if filename == None:
+#         filename = unique_filename_in()
+#     _cat(ex, input_file, stdout=filename)
+#     return filename
+
+# def _cat_nonblocking(ex, input_file, filename=None):
+#     if filename == None:
+#         filename = unique_filename_in()
+#     f = _cat.nonblocking(ex, input_file, stdout=filename)
+#     class Future(object):
+#         def __init__(self, f):
+#             self.future = f
+#         def wait(self):
+#             self.future.wait()
+#             return filename
+#     return Future(f)
+
+# cat.nonblocking = _cat_nonblocking
 
 
 def pause():
@@ -78,7 +103,7 @@ def touch(filename = None):
 @program
 def remove_lines_matching(pattern, filename):
     output_file = unique_filename_in()
-    return {'arguments': ['gawk',"""!/%s/ { print $0 > "%s" }""" % (pattern,output_file),
+    return {'arguments': ['awk',"""!/%s/ { print $0 > "%s" }""" % (pattern,output_file),
                           filename],
             'return_value': output_file}
     
@@ -87,10 +112,10 @@ def remove_lines_matching(pattern, filename):
 def md5sum(filename):
     """Calculate the MD5 sum of *filename* and return it as a string."""
     def parse_output(p):
-        m = re.search(r'^\s*([a-f0-9A-F]+)\s+' + filename + r'\s*$',
+        m = re.search(r'=\s*([a-f0-9A-F]+)\s*$',
                       ''.join(p.stdout))
         return m.groups()[-1] # in case of a weird line in LSF
-    return {"arguments": ["md5sum",filename],
+    return {"arguments": ["openssl","md5",filename],
             "return_value": parse_output}
 
         
@@ -127,9 +152,8 @@ def split_file(filename, n_lines = 1000, prefix = None, suffix_length = 3):
     if prefix == None:
         prefix = unique_filename_in()
     def extract_filenames(p):
-        return [re.search(r"creating file .(.+)'", x).groups()[0]
-                for x in p.stdout + p.stderr]
-    return {"arguments": ["split", "--verbose", "-a", str(suffix_length),
+        return [x for x in os.listdir('.') if x.startswith(prefix)]
+    return {"arguments": ["split", "-a", str(suffix_length),
                           "-l", str(n_lines), filename, prefix],
             "return_value": extract_filenames}
 
@@ -291,14 +315,19 @@ def deepmap(f, st):
         return f(st)
 
 def parallel_bowtie_lsf(ex, index, reads, n_lines = 1000000, bowtie_args="-Sra", add_nh_flags=False):
-    """Identical to parallel_bowtie, but runs programs via LSF."""
-    return parallel_bowtie(ex, index, reads, n_lines, bowtie_args, add_nh_flags, via='lsf')
+    """Deprecated.  Use parallel_bowtie with ``via="lsf"`` instead."""
+    raise DeprecationWarning("parallel_bowtie_lsf is deprecated.  Use parallel_bowtie with via='lsf' instead")
+    # return parallel_bowtie(ex, index, reads, n_lines, bowtie_args, add_nh_flags, via='lsf')
 
-@program
-def external_add_nh_flag(samfile):
-    outfile = unique_filename_in()
-    return {'arguments': ['add_nh_flag',samfile,outfile],
-            'return_value': outfile}
+try:
+    import pysam
+    @program
+    def external_add_nh_flag(samfile):
+        outfile = unique_filename_in()
+        return {'arguments': ['add_nh_flag',samfile,outfile],
+                'return_value': outfile}
+except:
+    print >>sys.stderr, "PySam not found.  Skipping external_add_nh_flag."
 
 ###############
 # BAM/SAM files
@@ -338,7 +367,7 @@ def replace_bam_header(header, bamfile):
 
 @program
 def sort_bam(bamfile):
-    """Sort a BAM file *bamfile*.
+    """Sort a BAM file *bamfile* by chromosome coordinates.
 
     Returns the filename of the newly created, sorted BAM file.
 
@@ -348,6 +377,43 @@ def sort_bam(bamfile):
     return {'arguments': ['samtools','sort',bamfile,filename],
             'return_value': filename + '.bam'}
 
+@program
+def sort_bam_by_read(bamfile):
+    """Sort a BAM file *bamfile* by read names.
+
+    Returns the filename of the newly created, sorted BAM file.
+
+    Equivalent: ``samtools sort -n ...``
+    """
+    filename = unique_filename_in()
+    return {'arguments': ['samtools','sort','-n',bamfile,filename],
+            'return_value': filename + '.bam'}
+
+
+def read_sets(reads):
+    """Groups the alignments in a BAM file by read.
+
+    *reads* should be an iterator over reads, such as the object
+     returned by pysam.Samfile.  The SAM/BAM file must be sorted by
+     read.  ``read_sets`` removes all unmapped reads, and returns an
+     iterator over lists of all AlignedRead objects consisting of the
+     same read.
+    """
+    last_read = None
+    for r in reads:
+        if r.rname == -1 or r.is_unmapped:
+            pass
+        elif r.qname != last_read:
+            if last_read != None:
+                yield accum
+            accum = [r]
+            last_read = r.qname
+        else:
+            accum.append(r)
+    if last_read != None:
+        # We have to check, since if samfile
+        # has no alignments, accum is never defined.
+        yield accum    
 
 @program
 def index_bam(bamfile):
@@ -379,53 +445,36 @@ def merge_bam(files):
         return {'arguments': ['samtools','merge',filename] + files,
                 'return_value': filename}
 
-def split_by_readname(samfile):
-    """Return an iterator over the reads in *samfile* grouped by read name.
 
-    The SAM file produced by bowtie is sorted by read name.  Often we
-    want to work with all of the alignments of a particular read at
-    once.  This function turns the flat list of reads into a list of
-    lists of reads, where each sublist has the same read name.
-    """
-    last_read = None
-    for r in samfile:
-        if r.qname != last_read:
-            if last_read != None:
-                yield accum
-            accum = [r]
-            last_read = r.qname
+try:
+    import pysam
+    def add_nh_flag(samfile, out=None):
+        """Adds NH (Number of Hits) flag to each read alignment in *samfile*.
+        
+        Scans a BAM file ordered by read name, counts the number of
+        alternative alignments reported and writes them to a BAM file
+        with the NH tag added.
+        
+        If *out* is ``None``, a random name is used.
+        """
+        infile = pysam.Samfile(samfile, "r")
+        if out == None:
+            outname = unique_filename_in()
         else:
-            accum.append(r)
-    if last_read != None:
-        # We have to check, since if samfile
-        # has no alignments, accum is never defined.
-        yield accum
-
-def add_nh_flag(samfile, out=None):
-    """Adds NH (Number of Hits) flag to each read alignment in *samfile*.
-    
-    Scans a BAM file ordered by read name, counts the number of
-    alternative alignments reported and writes them to a BAM file
-    with the NH tag added.
-
-    If *out* is ``None``, a random name is used.
-    """
-    infile = pysam.Samfile(samfile, "r")
-    if out == None:
-        outname = unique_filename_in()
-    else:
-        outname = out
-    outfile = pysam.Samfile(outname, "wb", template=infile)
-    for readset in split_by_readname(infile):
-        nh = len(readset)
-        for read in readset:
-            if (read.is_unmapped):
-                nh = 0
-            read.tags = read.tags+[("NH",nh)]
-            outfile.write(read)
-    infile.close()
-    outfile.close()
-    return outname
+            outname = out
+        outfile = pysam.Samfile(outname, "wb", template=infile)
+        for readset in read_sets(infile):
+            nh = len(readset)
+            for read in readset:
+                if (read.is_unmapped):
+                    nh = 0
+                read.tags = read.tags+[("NH",nh)]
+                outfile.write(read)
+        infile.close()
+        outfile.close()
+        return outname
+except:
+    print >>sys.stderr, "PySam not found.  Skipping add_nh_flag."
 
 # Adding special file types
 
@@ -444,25 +493,28 @@ def add_pickle(execution, val, description="", alias=None):
     execution.add(filename, description=description, alias=alias)
     return filename
 
-
-@contextmanager
-def add_figure(ex, figure_type='eps', description="", alias=None, figure_size=None):
-    """Create a matplotlib figure and write it to the repository.
-
-    Use this as a with statement, for instance::
-
-        with add_figure(ex, 'eps') as fig:
-            hist(a)
-            xlabel('Random things I found')
-
-    This will plot a histogram of a with the x axis label set, and
-    write the plot to the repository as an EPS file.
-    """
-    f = pylab.figure(figsize=figure_size)
-    yield f
-    filename = unique_filename_in() + '.' + figure_type
-    f.savefig(filename)
-    ex.add(filename, description=description, alias=alias)
+try:
+    import pylab
+    @contextmanager
+    def add_figure(ex, figure_type='eps', description="", alias=None, figure_size=None):
+        """Create a matplotlib figure and write it to the repository.
+    
+        Use this as a with statement, for instance::
+    
+            with add_figure(ex, 'eps') as fig:
+                hist(a)
+                xlabel('Random things I found')
+    
+        This will plot a histogram of a with the x axis label set, and
+        write the plot to the repository as an EPS file.
+        """
+        f = pylab.figure(figsize=figure_size)
+        yield f
+        filename = unique_filename_in() + '.' + figure_type
+        f.savefig(filename)
+        ex.add(filename, description=description, alias=alias)
+except:
+    print >>sys.stderr, "Could not import matplotlib.  Skipping add_figure."
 
 
 def add_and_index_bam(ex, bamfile, description="", alias=None):
@@ -503,6 +555,22 @@ def add_bowtie_index(execution, files, description="", alias=None, index=None):
     execution.add(index + ".rev.1.ebwt", associate_to_filename=index, template='%s.rev.1.ebwt')
     execution.add(index + ".rev.2.ebwt", associate_to_filename=index, template='%s.rev.2.ebwt')
     return index
+
+try:
+    import tables as h5
+    @contextmanager
+    def add_hdf5(ex, description='', alias=None):
+        h5filename = unique_filename_in()
+        db = h5.openFile(h5filename, 'w', title=description)
+        try:
+            yield db
+        finally:
+            db.close()
+            ex.add(db, description=description, alias=alias)
+except:
+    print >>sys.stderr, "PyTables not found.  Skipping."
+
+
 
 if __name__ == "__main__":
     import doctest

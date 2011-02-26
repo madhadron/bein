@@ -30,7 +30,7 @@ There are three ways to install bein:
 
 #. The simplest way is to fetch and install bein automatically from the Python Package Index.  Just run::
 
-    sudo easy_install bein
+    sudo pip install bein
 
 #. Download a compressed archive of the source code, and install it by hand.  In the directory you downloaded ``bein-X.tar.gz``, run the commands::
 
@@ -314,7 +314,7 @@ Let's bind ``wc -l`` as we discussed above.  The output of ``wc -l`` is a line c
     @program
     def count_lines(filename):
        def parse_output(p):
-            m = re.search(r'^\s+(\d+)\s+' + filename, ''.join(p.stdout))
+            m = re.search(r'^\s*(\d+)\s+' + filename, ''.join(p.stdout))
             return int(m.groups()[0])
        return {'arguments': ["wc","-l",filename],
                'return_value': parse_output}

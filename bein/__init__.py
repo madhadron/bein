@@ -165,13 +165,24 @@ class program(object):
             a.wait()
             b.wait()
 
-    If you are on a system using the LSF batch submission system, you
-    can also call the ``lsf`` method with exactly the same arguments as
-    nonblocking to run the program as a batch job::
+    By default, ``nonblocking`` runs local processes, but you can
+    control how it runs its processes with the ``via`` keyword
+    argument.  For example, on systems using the LSF batch submission
+    system,s you can run commands via batch submission by passing the
+    ``via`` argument the value ``"lsf"``::
 
         with execution(lims) as ex:
-            a = touch.lsf(ex, "myfile1")
+            a = touch.nonblocking(ex, "myfile1", via="lsf")
             a.wait()
+
+    You can force local execution with ``via="local"``.
+
+    Some programs do not accept an output file as an argument and only
+    write to ``stdout``.  Alternately, you might need to capture
+    ``stderr`` to a file.  All the methods of ``@program`` accept
+    keyword arguments ``stdout`` and ``stderr`` to specify files to
+    write these streams to.  If they are omitted, then both streams
+    are captured and returned in the ``ProgramOutput`` object.
     """
     def __init__(self, gen_args):
         self.gen_args = gen_args
@@ -189,15 +200,42 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to program " + self.gen_args.__name__ + " must be an Execution.")
+        if kwargs.has_key('stdout'):
+            stdout = open(kwargs['stdout'],'w')
+            kwargs.pop('stdout')
+        else:
+            stdout = subprocess.PIPE
+
+        if kwargs.has_key('stderr'):
+            stderr = open(kwargs['stderr'],'w')
+            kwargs.pop('stderr')
+        else:
+            stderr = subprocess.PIPE
+
+
         d = self.gen_args(*args, **kwargs)
-        sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE,
-                              cwd = ex.working_directory)
+
+        try:
+            sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=stdout,
+                                  stderr=stderr,
+                                  cwd = ex.working_directory)
+        except OSError, ose:
+            raise ValueError("Program %s does not seem to exist in your $PATH." % d['arguments'][0])
+
         return_code = sp.wait()
+        if isinstance(stdout,file):
+            stdout_value = None
+        else:
+            stdout_value = sp.stdout.readlines()
+            
+        if isinstance(stderr,file):
+            stderr_value = None
+        else:
+            stderr_value = sp.stderr.readlines()
+                
         po = ProgramOutput(return_code, sp.pid,
-                                d["arguments"], 
-                                sp.stdout.readlines(),  # stdout and stderr
-                                sp.stderr.readlines())  # are lists of strings ending with newlines
+                           d["arguments"], 
+                           stdout_value, stderr_value)
         ex.report(po)
         if return_code == 0:
             z = d["return_value"]
@@ -228,6 +266,17 @@ class program(object):
         with execution(lims) as ex:
             a = touch.nonblocking("boris")
             f = a.wait()
+
+        All the methods are named as _method, with the same arguments
+        as ``nonblocking``.  That is, the ``via="local"`` method is
+        implemented by ``_local``, the ``via="lsf"`` method by
+        ``_lsf``, etc.  When writing a new method, name it in the same
+        way, and add a condition to the ``if`` statement in
+        ``nonblocking``.
+
+        If you need to pass a keyword argument ``via`` to your
+        program, you will need to call one of the hidden methods
+        (``_local`` or ``_lsf``) directly.
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
@@ -239,15 +288,28 @@ class program(object):
             via = 'local'
 
         if via == 'local':
-            return self.local(ex, *args, **kwargs)
+            return self._local(ex, *args, **kwargs)
         elif via == 'lsf':
-            return self.lsf(ex, *args, **kwargs)
+            return self._lsf(ex, *args, **kwargs)
 
-    def local(self, ex, *args, **kwargs):
-        """Like ``nonblocking``, but always runs locally.
+    def _local(self, ex, *args, **kwargs):
+        """Method called by ``nonblocking`` for running locally.
 
-        If you need to pass a ``via`` keyword argument to your function, you will have to call this method directly.
+        If you need to pass a ``via`` keyword argument to your
+        function, you will have to call this method directly.
         """
+        if kwargs.has_key('stdout'):
+            stdout = open(kwargs['stdout'],'w')
+            kwargs.pop('stdout')
+        else:
+            stdout = subprocess.PIPE
+
+        if kwargs.has_key('stderr'):
+            stderr = open(kwargs['stderr'],'w')
+            kwargs.pop('stderr')
+        else:
+            stderr = subprocess.PIPE
+
         d = self.gen_args(*args, **kwargs)
 
         class Future(object):
@@ -257,37 +319,79 @@ class program(object):
             def wait(self):
                 v.wait()
                 ex.report(self.program_output)
-                return self.return_value
+                if isinstance(f.return_value, Exception):
+                    raise self.return_value
+                else:
+                    return self.return_value
         f = Future()
         v = threading.Event()
         def g():
-            sp = subprocess.Popen(d["arguments"], bufsize=-1, stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE,
-                                  cwd = ex.working_directory)
-            return_code = sp.wait()
-            f.program_output = ProgramOutput(return_code, sp.pid,
-                                             d["arguments"], 
-                                             sp.stdout.readlines(), 
-                                             sp.stderr.readlines())
-            if return_code == 0:
-                z = d["return_value"]
-                if callable(z):
-                    f.return_value = z(f.program_output)
+            try:
+                try:
+                    sp = subprocess.Popen(d["arguments"], bufsize=-1, 
+                                          stdout=stdout,
+                                          stderr=stderr,
+                                          cwd = ex.working_directory)
+                except OSError, ose:
+                    raise ValueError("Program %s does not seem to exist in your $PATH." % d['arguments'][0])
+
+                return_code = sp.wait()
+                if isinstance(stdout,file):
+                    stdout_value = None
                 else:
-                    f.return_value = z
-            v.set()
+                    stdout_value = sp.stdout.readlines()
+
+                if isinstance(stderr,file):
+                    stderr_value = None
+                else:
+                    stderr_value = sp.stderr.readlines()
+
+                f.program_output = ProgramOutput(return_code, sp.pid,
+                                                 d["arguments"], 
+                                                 stdout_value,
+                                                 stderr_value)
+                if return_code == 0:
+                    z = d["return_value"]
+                    if callable(z):
+                        f.return_value = z(f.program_output)
+                    else:
+                        f.return_value = z
+                v.set()
+            except Exception, e:
+                f.return_value = e
+                v.set()
         a = threading.Thread(target=g)
         a.start()
-        return(f)
+        return f
 
     def lsf(self, ex, *args, **kwargs):
-        """Like ``nonblocking``, but always runs via LSF."""
+        """Deprecated.  Use nonblocking(via="lsf") instead."""
+        raise DeprecationWarning("Use nonblocking(via='lsf') instead.")
+        return self._lsf(ex, *args, **kwargs)
+
+    def _lsf(self, ex, *args, **kwargs):
+        """Method called by ``nonblocking`` to run via LSF."""
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args, **kwargs)
-        stdout_filename = unique_filename_in(ex.working_directory)
-        stderr_filename = unique_filename_in(ex.working_directory)
-        cmds = ["bsub","-cwd",ex.remote_working_directory,"-o",stdout_filename,"-e",stderr_filename,
+
+        if kwargs.has_key('stdout'):
+            stdout = open(kwargs['stdout'],'w')
+            kwargs.pop('stdout')
+            load_stdout = False
+        else:
+            stdout = unique_filename_in(ex.working_directory)
+            load_stdout = True
+
+        if kwargs.has_key('stderr'):
+            stderr = open(kwargs['stderr'],'w')
+            kwargs.pop('stderr')
+            load_stderr = False
+        else:
+            stderr = unique_filename_in(ex.working_directory)
+            load_stderr = True
+
+        cmds = ["bsub","-cwd",ex.remote_working_directory,"-o",stdout,"-e",stderr,
                 "-K","-r"] + d["arguments"]
         class Future(object):
             def __init__(self):
@@ -300,28 +404,40 @@ class program(object):
         f = Future()
         v = threading.Event()
         def g():
-            nullout = open(os.path.devnull, 'w')
-            sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
-            return_code = sp.wait()
-            nullout.close()
-            stdout = None
-            stderr = None
-            while not(os.path.exists(os.path.join(ex.working_directory, stdout_filename)) and
-                      os.path.exists(os.path.join(ex.working_directory, stderr_filename))):
-                pass # We need to wait until the files actually show up
-            with open(os.path.join(ex.working_directory,stdout_filename), 'r') as fo:
-                stdout = fo.readlines()
-            with open(os.path.join(ex.working_directory,stderr_filename), 'r') as fe:
-                stderr = fe.readlines()
-            f.program_output = ProgramOutput(return_code, sp.pid,
-                                             cmds, stdout, stderr)
-            if return_code == 0:
-                z = d["return_value"]
-                if callable(z):
-                    f.return_value = z(f.program_output)
+            try:
+                nullout = open(os.path.devnull, 'w')
+                sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
+                return_code = sp.wait()
+                while not(os.path.exists(os.path.join(ex.working_directory,
+                                                      stdout)) and
+                          os.path.exists(os.path.join(ex.working_directory,
+                                                      stderr))):
+                    pass # We need to wait until the files actually show up
+                if load_stdout:
+                    with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
+                        stdout_value = fo.readlines()
                 else:
-                    f.return_value = z
-            v.set()
+                    stdout_value = None
+
+                if load_stderr:
+                    with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
+                        stderr = fe.readlines()
+                else:
+                    stderr_value = None
+
+                f.program_output = ProgramOutput(return_code, sp.pid,
+                                                 cmds, stdout_value, stderr_value)
+                if return_code == 0:
+                    z = d["return_value"]
+                    if callable(z):
+                        f.return_value = z(f.program_output)
+                    else:
+                        f.return_value = z
+                v.set()
+            except:
+                f.return_value = None
+                v.set()
+                raise
         a = threading.Thread(target=g)
         a.start()
         return(f)
@@ -443,8 +559,8 @@ def execution(lims = None, description="", remote_working_directory=None):
     run than on the nodes from which jobs are submitted.  For
     instance, if you are working in /scratch/abc on your local node,
     the worker nodes might mount the same directory as
-    /nfs/boris/scratch/abc.  In this case, the lsf method of bound
-    programs would not work correctly.
+    /nfs/boris/scratch/abc.  In this case, running programs via LSF
+    would not work correctly.
 
     If this is the case, you can pass the equivalent directory on
     worker nodes as *remote_working_directory*.  In the example above,
@@ -750,42 +866,119 @@ class MiniLIMS(object):
         to the repository are copied to the repository and entered in
         the file table.
         """
-        self.db.execute("""
-                        insert into execution(started_at,finished_at,
-                                              working_directory,description,
-                                              exception) 
-                        values (?,?,?,?,?)""",
-                        (ex.started_at, ex.finished_at, ex.working_directory, description,
-                         exception_string))
-        [exid] = [x for (x,) in self.db.execute("select last_insert_rowid()")]
+        self.db.execute("""insert into execution
+                           (started_at, finished_at, working_directory,
+                            description, exception) 
+                           values (?,?,?,?,?)""",
+                        (ex.started_at, ex.finished_at, ex.working_directory, 
+                         description, exception_string))
+        exid = self.db.execute("select last_insert_rowid()").fetchone()[0]
+
+        # Write all the programs
         for i,p in enumerate(ex.programs):
-            self.db.execute("""insert into program(pos,execution,pid,return_code,stdout,stderr) values (?,?,?,?,?,?)""",
+            if p.stdout == None:
+                stdout_value = ""
+            else:
+                stdout_value = "".join(p.stdout)
+            if p.stderr == None:
+                stderr_value = ""
+            else:
+                stderr_value = "".join(p.stderr)
+
+            self.db.execute("""insert into program(pos,execution,pid,
+                                                   return_code,stdout,stderr)
+                               values (?,?,?,?,?,?)""",
                             (i, exid, p.pid, p.return_code,
-                             "".join(p.stdout), "".join(p.stderr)))
+                             stdout_value, stderr_value))
             for j,a in enumerate(p.arguments):
-                self.db.execute("""insert into argument(pos,program,execution,argument) values (?,?,?,?)""",
+                self.db.execute("""insert into argument(pos,program,execution,
+                                   argument) values (?,?,?,?)""",
                                 (j,i,exid,a))
+
+        # Write the files
+
+        # This section is rather complicated due to the necessity of
+        # handling hierarchies of associations correctly.  The
+        # algorithm is roughly as follows:
+
+        # remaining = files which have yet to be inserted
+        # removed = those files already processed
+        # while True:
+        #     these = all files to be processed this round,
+        #             defined as those whose associate_to_file field
+        #             (field 3 of the tuple) is in removed.
+        #     for file in these:
+        #         insert the file
+        #         add any alias
+        #         associate the file, renaming it so association namings are
+        #             preserved even in the repository
+
         fileids = {}
-        for (filename,description,associate_to_id,associate_to_filename,template,alias) in ex.files:
-            self.db.execute("""insert into file(external_name,repository_name,description,origin,origin_value) values (?,importfile(?),?,?,?)""",
-                            (filename,os.path.abspath(os.path.join(ex.working_directory,filename)),
-                             description,'execution',exid))
-            fileids[filename] = self.db.execute("""select last_insert_rowid()""").fetchone()[0]
-            if alias != None:
-                self.add_alias(fileids[filename], alias)
-            if template != None and \
-                    (associate_to_id != None or \
-                         associate_to_filename != None):
-                if associate_to_id != None:
-                    target = associate_to_id
-                elif associate_to_filename != None:
-                    target = fileids[associate_to_filename]
-                self.associate_file(fileids[filename],target,
-                                    template)
+        removed = [(None,)]
+        remaining = ex.files
+        while remaining != []:
+            these = [k for k in ex.files if k[3] in [x[0] for x in removed]]
+
+            for (filename,description,associate_to_id,associate_to_filename,
+                 template,alias) in these:
+
+                fileids[filename] = self._insert_file(ex, exid, filename, description)
+
+                if alias != None:
+                    self.add_alias(thisid, alias)
+
+                if associate_to_id != None or associate_to_filename != None:
+                    if template == None:
+                        raise ValueError("Must provide a template for an association.")
+                    elif template == "%s":
+                        raise ValueError("Template must be more than just %s")
+                    elif template.index("%s") == -1:
+                        raise ValueError("Template must contain %s")
+                    elif associate_to_id != None:
+                        self._associate_file(fileids[filename], associate_to_id, template)
+                    else:
+                        self._associate_file(fileids[filename], fileids[associate_to_filename], template)
+
+            [remaining.remove(t) for t in these]
+            removed.extend(these)
+
+
         for used_file in set(ex.used_files):
-            [x for x in self.db.execute("""insert into execution_use(execution,file) values (?,?)""", (exid,used_file))]
+            self.db.execute("""insert into execution_use(execution,file) 
+                               values (?,?)""", (exid,used_file))
         self.db.commit()
         return exid
+
+    def _insert_file(self, ex, exid, filename, description):
+        self.db.execute("""insert into file(external_name,repository_name,
+                                            description,origin,origin_value) 
+                           values (?,importfile(?),?,?,?)""",
+                        (filename,
+                         os.path.abspath(os.path.join(ex.working_directory,filename)),
+                         description, 'execution', exid))
+        return self.db.execute("""select last_insert_rowid()""").fetchone()[0]
+
+    def _rename_in_repository(self, fileid, new_repository_name):
+        old_target_name = self.db.execute("""select repository_name from file
+                                             where id=?""", (fileid,)).fetchone()[0]
+        self.db.execute("""drop trigger prevent_repository_name_change""")
+        self.db.execute("""update file set repository_name=? where id=?""",
+                        (new_repository_name, fileid))
+        self.db.execute("""CREATE TRIGGER prevent_repository_name_change
+                           BEFORE UPDATE ON file
+                           FOR EACH ROW WHEN (OLD.repository_name != NEW.repository_name) BEGIN
+                           SELECT RAISE(FAIL, 'Cannot change the repository name of a file.');
+                           END""")
+        shutil.move(os.path.join(self.file_path, old_target_name),
+                    os.path.join(self.file_path, new_repository_name))
+
+    def _associate_file(self, thisid, targetid, template):
+        # Make the filename in the repository match this association
+        raw_name = self.db.execute("""select repository_name from file where id=?""", 
+                                   (targetid,)).fetchone()[0]
+        new_target_name = template % raw_name
+        self._rename_in_repository(thisid, new_target_name)
+        self.associate_file(thisid, targetid, template)
 
     def search_files(self, with_text=None, older_than=None, newer_than=None, source=None):
         """Find files matching given criteria in the LIMS.
@@ -1006,6 +1199,11 @@ class MiniLIMS(object):
         """Delete a file from the repository."""
         fileid = self.resolve_alias(file_or_alias)
         try:
+            try:
+                for (f,t) in self.associated_files_of(fileid):
+                    self.delete_file(f)
+            except ValueError, v:
+                pass
             sql = "select repository_name from file where id = ?"
             [repository_name] = [x for (x,) in self.db.execute(sql, (fileid,))]
             sql = "delete from file where id = ?"
@@ -1014,11 +1212,6 @@ class MiniLIMS(object):
             sql = "delete from file_alias where file=?"
             self.db.execute(sql, (fileid,)).fetchone()
             self.db.commit()
-            try:
-                for (f,t) in self.associated_files_of(fileid):
-                    self.delete_file(f)
-            except ValueError, v:
-                pass
         except ValueError:
             raise ValueError("No such file id " + str(fileid))
 
@@ -1036,6 +1229,8 @@ class MiniLIMS(object):
             self.db.execute("delete from program where execution = ?", 
                             (execution_id,))
             self.db.execute("delete from execution where id = ?", 
+                            (execution_id,))
+            self.db.execute("delete from execution_use where execution=?",
                             (execution_id,))
             self.db.commit()
         except ValueError, v:
@@ -1090,7 +1285,11 @@ class MiniLIMS(object):
         might have to be resolved.        
         """
         if isinstance(alias, int):
-            return alias
+            x = self.db.execute("select id from file where id=?", (alias,)).fetchall()
+            if x != [] and x != None:
+                return alias
+            else:
+                raise ValueError("No such file with id %d" % alias)
         elif isinstance(alias, str):
             x = self.db.execute("select file from file_alias where alias=?", (alias,)).fetchone()
             if x == None:
