@@ -925,7 +925,7 @@ class MiniLIMS(object):
                 fileids[filename] = self._insert_file(ex, exid, filename, description)
 
                 if alias != None:
-                    self.add_alias(thisid, alias)
+                    self.add_alias(fileids[filename], alias)
 
                 if associate_to_id != None or associate_to_filename != None:
                     if template == None:
