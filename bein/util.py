@@ -390,7 +390,7 @@ def sort_bam_by_read(bamfile):
             'return_value': filename + '.bam'}
 
 
-def read_sets(reads):
+def read_sets(reads,keep_unmapped=False):
     """Groups the alignments in a BAM file by read.
 
     *reads* should be an iterator over reads, such as the object
@@ -401,7 +401,9 @@ def read_sets(reads):
     """
     last_read = None
     for r in reads:
-        if r.rname == -1 or r.is_unmapped:
+        if r.rname == -1
+            pass
+        elif (not keep_unmapped) and r.is_unmapped:
             pass
         elif r.qname != last_read:
             if last_read != None:
@@ -463,7 +465,7 @@ try:
         else:
             outname = out
         outfile = pysam.Samfile(outname, "wb", template=infile)
-        for readset in read_sets(infile):
+        for readset in read_sets(infile,keep_unmapped=True):
             nh = len(readset)
             for read in readset:
                 if (read.is_unmapped):
