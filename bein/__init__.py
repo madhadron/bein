@@ -202,6 +202,9 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to program " + self.gen_args.__name__ + " must be an Execution.")
+        elif ex.id != None:
+            raise SyntaxError("Program being called on an execution that has already terminated.")
+
         if kwargs.has_key('stdout'):
             stdout = open(kwargs['stdout'],'w')
             kwargs.pop('stdout')
@@ -282,6 +285,8 @@ class program(object):
         """
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
+        elif ex.id != None:
+            raise SyntaxError("Program being called on an execution that has already terminated.")
 
         if kwargs.has_key('via'):
             via = kwargs['via']

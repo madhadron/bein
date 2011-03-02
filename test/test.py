@@ -74,7 +74,21 @@ class TestProgramBinding(TestCase):
                 f.write("This is a test\nof the emergency broadcast\nsystem.\n")
             q = count_lines.nonblocking(ex, 'boris', via='lsf')
             self.assertEqual(str(q.__class__), "<class 'bein.Future'>")
-            self.assertEqual(q.wait(), 3)            
+            self.assertEqual(q.wait(), 3)          
+
+    def test_syntaxerror_outside_execution(self):
+        with execution(M) as ex:
+            pass
+        M.delete_execution(ex.id)
+        with self.assertRaises(SyntaxError):
+            touch(ex)
+
+    def test_syntaxerror_outside_execution_nonblocking(self):
+        with execution(M) as ex:
+            pass
+        M.delete_execution(ex.id)
+        with self.assertRaises(SyntaxError):
+            touch.nonblocking(ex)
 
 class TestUniqueFilenameIn(TestCase):
     def test_state_determines_filename(self):
