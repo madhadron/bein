@@ -382,16 +382,18 @@ class program(object):
             raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args, **kwargs)
 
+
         if kwargs.has_key('stdout'):
-            stdout = open(kwargs['stdout'],'w')
+            stdout = kwargs['stdout']
             kwargs.pop('stdout')
             load_stdout = False
         else:
             stdout = unique_filename_in(ex.working_directory)
             load_stdout = True
 
+
         if kwargs.has_key('stderr'):
-            stderr = open(kwargs['stderr'],'w')
+            stderr = kwargs['stderr']
             kwargs.pop('stderr')
             load_stderr = False
         else:
