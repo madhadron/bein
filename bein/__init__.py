@@ -417,7 +417,6 @@ class program(object):
                 nullout = open(os.path.devnull, 'w')
                 sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
                 return_code = sp.wait()
-                print "stdout = %s, stderr = %s" % (str(stdout), str(stderr))
                 while not((load_stdout or os.path.exists(os.path.join(ex.working_directory,
                                                                       stdout))) and
                           (load_stderr or os.path.exists(os.path.join(ex.working_directory,
