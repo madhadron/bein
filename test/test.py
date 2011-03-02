@@ -123,6 +123,17 @@ class TestMiniLIMS(TestCase):
             M.add_alias(a, 'hilda')
             self.assertEqual(M.resolve_alias('hilda'), a)
 
+    def test_path_to_file_on_execution(self):
+        with execution(None) as ignoreme:
+            f = touch(ignoreme)
+            M = MiniLIMS("boris")
+            fid = M.import_file(f)
+            mpath = M.path_to_file(fid)
+            with execution(M) as ex:
+                fpath = ex.path_to_file(fid)
+        self.assertEqual(mpath, fpath)
+            
+
 @program
 def echo(s):
     return {'arguments': ['echo',str(s)],

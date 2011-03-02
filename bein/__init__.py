@@ -102,9 +102,11 @@ def unique_filename_in(path=None):
     def random_string():
         return "".join([random.choice(string.letters + string.digits) 
                         for x in range(20)])
-    filename = random_string()
-    while os.path.exists(os.path.join(path,filename)):
+    while True:
         filename = random_string()
+        files = [f for f in os.listdir(path) if f.startswith(filename)]
+        if files == []:
+            break
     return filename
 
 
@@ -468,6 +470,13 @@ class Execution(object):
         self.started_at = int(time.time())
         self.finished_at = None
         self.id = None
+    def path_to_file(self, id_or_alias):
+        """Fetch the path to *id_or_alias* in the attached LIMS."""
+        if self.lims == None:
+            raise ValueError("Cannot use path_to_file; no attached LIMS.")
+        else:
+            return self.lims.path_to_file(id_or_alias)
+
     def report(self, program):
         """Add a ProgramOutput object to the execution.
 
