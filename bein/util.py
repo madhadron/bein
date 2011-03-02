@@ -401,9 +401,7 @@ def read_sets(reads,keep_unmapped=False):
     """
     last_read = None
     for r in reads:
-        if r.rname == -1:
-            pass
-        elif (not keep_unmapped) and r.is_unmapped:
+        if (not keep_unmapped) and (r.rname == -1 or r.is_unmapped):
             pass
         elif r.qname != last_read:
             if last_read != None:
