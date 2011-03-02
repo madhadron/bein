@@ -415,20 +415,19 @@ class program(object):
                 nullout = open(os.path.devnull, 'w')
                 sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
                 return_code = sp.wait()
-                while not(os.path.exists(os.path.join(ex.working_directory,
-                                                      stdout)) and
-                          os.path.exists(os.path.join(ex.working_directory,
-                                                      stderr))):
-                    pass # We need to wait until the files actually show up
                 if load_stdout:
+                    while not(os.path.exists(os.path.join(ex.working_directory,stdout))):
+                        pass # We need to wait until the files actually show up
                     with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
                         stdout_value = fo.readlines()
                 else:
                     stdout_value = None
 
                 if load_stderr:
+                    while not(os.path.exists(os.path.join(ex.working_directory,stderr))):
+                        pass # We need to wait until the files actually show up
                     with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
-                        stderr = fe.readlines()
+                        stderr_value = fe.readlines()
                 else:
                     stderr_value = None
 
