@@ -380,8 +380,6 @@ class program(object):
         """Method called by ``nonblocking`` to run via LSF."""
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
-        d = self.gen_args(*args, **kwargs)
-
 
         if kwargs.has_key('stdout'):
             stdout = kwargs['stdout']
@@ -399,6 +397,8 @@ class program(object):
         else:
             stderr = unique_filename_in(ex.working_directory)
             load_stderr = True
+
+        d = self.gen_args(*args, **kwargs)
 
         cmds = ["bsub","-cwd",ex.remote_working_directory,"-o",stdout,"-e",stderr,
                 "-K","-r"] + d["arguments"]
