@@ -61,6 +61,7 @@ import sqlite3
 import time
 import shutil
 import threading
+import re
 from contextlib import contextmanager
 
 
@@ -382,12 +383,12 @@ class program(object):
             raise ValueError("First argument to a program must be an Execution.")
 
         if kwargs.has_key('stdout'):
-            stdout = kwargs['stdout']
+            stdout1 = kwargs['stdout']
             kwargs.pop('stdout')
             load_stdout = False
         else:
-            stdout = unique_filename_in(ex.working_directory)
             load_stdout = True
+        stdout = unique_filename_in(ex.working_directory)
 
 
         if kwargs.has_key('stderr'):
@@ -417,17 +418,32 @@ class program(object):
                 nullout = open(os.path.devnull, 'w')
                 sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
                 return_code = sp.wait()
-                if load_stdout:
-                    while not(os.path.exists(os.path.join(ex.working_directory,stdout))):
-                        pass # We need to wait until the files actually show up
-                    with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
+                while not(os.path.exists(os.path.join(ex.working_directory,stdout))):
+                    pass # We need to wait until the files actually show up
+                with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
+                    if load_stdout:
                         stdout_value = fo.readlines()
-                else:
-                    stdout_value = None
-
+                    else:
+                        stdout_value = []
+                        with open(stdout1,"w") as fo1:
+                            l = ''
+                            while not re.search(r'^The output \(if any\) follows:',l):
+                                l = fo.readline()
+                                stdout_value.append(l)
+                            stdout_value.append(fo.readline())
+                            trio = []    
+                            while True:
+                                t = [fo.readline(),fo.readline(),fo.readline()]
+                                rf = [i for i,x in enumerate(t) if re.search(r'^PS:',x)]
+                                if len(rf)>0:
+                                    break
+                                [fo1.write(l) for l in trio]
+                                trio = t
+                            [fo1.write(l) for l in trio[:rf[0]+1]]
+                        stdout_value.extend(trio[rf[0]+1:]+t+fo.readlines())
+                while not(os.path.exists(os.path.join(ex.working_directory,stderr))):
+                    pass # We need to wait until the files actually show up
                 if load_stderr:
-                    while not(os.path.exists(os.path.join(ex.working_directory,stderr))):
-                        pass # We need to wait until the files actually show up
                     with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
                         stderr_value = fe.readlines()
                 else:
