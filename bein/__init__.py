@@ -382,27 +382,25 @@ class program(object):
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
 
+        stdout1 = ''
+        stderr1 = ''
+        stdout = unique_filename_in(ex.working_directory)
+        stderr = unique_filename_in(ex.working_directory)
         if kwargs.has_key('stdout'):
             stdout1 = kwargs['stdout']
             kwargs.pop('stdout')
-            load_stdout = False
-        else:
-            load_stdout = True
-        stdout = unique_filename_in(ex.working_directory)
-
-
         if kwargs.has_key('stderr'):
-            stderr = kwargs['stderr']
+            stderr1 = kwargs['stderr']
             kwargs.pop('stderr')
-            load_stderr = False
-        else:
-            stderr = unique_filename_in(ex.working_directory)
-            load_stderr = True
 
         d = self.gen_args(*args, **kwargs)
-
+        remote_cmd = " ".join(d["arguments"])
+        if stdout1:
+            remote_cmd += ">"+stdout1
+        if stderr1:
+            remote_cmd = "("+remote_cmd+")>&"+stderr1
         cmds = ["bsub","-cwd",ex.remote_working_directory,"-o",stdout,"-e",stderr,
-                "-K","-r"] + d["arguments"]
+                "-K","-r",remote_cmd]
         class Future(object):
             def __init__(self):
                 self.program_output = None
@@ -421,33 +419,11 @@ class program(object):
                 while not(os.path.exists(os.path.join(ex.working_directory,stdout))):
                     pass # We need to wait until the files actually show up
                 with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
-                    if load_stdout:
-                        stdout_value = fo.readlines()
-                    else:
-                        stdout_value = []
-                        with open(stdout1,"w") as fo1:
-                            l = ''
-                            while not re.search(r'^The output \(if any\) follows:',l):
-                                l = fo.readline()
-                                stdout_value.append(l)
-                            stdout_value.append(fo.readline())
-                            trio = []    
-                            while True:
-                                t = [fo.readline(),fo.readline(),fo.readline()]
-                                rf = [i for i,x in enumerate(t) if re.search(r'^PS:',x)]
-                                if len(rf)>0:
-                                    break
-                                [fo1.write(l) for l in trio]
-                                trio = t
-                            [fo1.write(l) for l in trio[:rf[0]+1]]
-                        stdout_value.extend(trio[rf[0]+1:]+t+fo.readlines())
+                    stdout_value = fo.readlines()
                 while not(os.path.exists(os.path.join(ex.working_directory,stderr))):
                     pass # We need to wait until the files actually show up
-                if load_stderr:
-                    with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
-                        stderr_value = fe.readlines()
-                else:
-                    stderr_value = None
+                with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
+                    stderr_value = fe.readlines()
 
                 f.program_output = ProgramOutput(return_code, sp.pid,
                                                  cmds, stdout_value, stderr_value)
