@@ -428,7 +428,7 @@ class program(object):
 
                 if load_stderr:
                     with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
-                        stderr = fe.readlines()
+                        stderr_value = fe.readlines()
                 else:
                     stderr_value = None
 
