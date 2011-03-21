@@ -596,9 +596,9 @@ def execution(lims = None, description="", remote_working_directory=None):
     exception_string = None
     try:
         yield ex
-    except Exception, e:
-        exception_string = ''.join(traceback.format_exception_only(e.__class__, str(e)))
-        raise e
+#    except Exception, e:
+#        exception_string = ''.join(traceback.format_exception_only(e.__class__, str(e)))
+#        raise e
     finally:
         ex.finish()
         try:
@@ -607,6 +607,8 @@ def execution(lims = None, description="", remote_working_directory=None):
         finally:
             os.chdir("..")
             shutil.rmtree(ex.working_directory, ignore_errors=True)
+            cleaned_up = True
+        assert(cleaned_up)
 
 
 class MiniLIMS(object):
