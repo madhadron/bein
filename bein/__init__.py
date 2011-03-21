@@ -382,16 +382,18 @@ class program(object):
             raise ValueError("First argument to a program must be an Execution.")
         d = self.gen_args(*args, **kwargs)
 
+
         if kwargs.has_key('stdout'):
-            stdout = open(kwargs['stdout'],'w')
+            stdout = kwargs['stdout']
             kwargs.pop('stdout')
             load_stdout = False
         else:
             stdout = unique_filename_in(ex.working_directory)
             load_stdout = True
 
+
         if kwargs.has_key('stderr'):
-            stderr = open(kwargs['stderr'],'w')
+            stderr = kwargs['stderr']
             kwargs.pop('stderr')
             load_stderr = False
         else:
@@ -415,10 +417,10 @@ class program(object):
                 nullout = open(os.path.devnull, 'w')
                 sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
                 return_code = sp.wait()
-                while not(os.path.exists(os.path.join(ex.working_directory,
-                                                      stdout)) and
-                          os.path.exists(os.path.join(ex.working_directory,
-                                                      stderr))):
+                while not((load_stdout or os.path.exists(os.path.join(ex.working_directory,
+                                                                      stdout))) and
+                          (load_stderr or os.path.exists(os.path.join(ex.working_directory,
+                                                                      stderr)))):
                     pass # We need to wait until the files actually show up
                 if load_stdout:
                     with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
@@ -594,9 +596,9 @@ def execution(lims = None, description="", remote_working_directory=None):
     exception_string = None
     try:
         yield ex
-    except Exception, e:
-        exception_string = ''.join(traceback.format_exception_only(e.__class__, str(e)))
-        raise e
+#    except Exception, e:
+#        exception_string = ''.join(traceback.format_exception_only(e.__class__, str(e)))
+#        raise e
     finally:
         ex.finish()
         try:
@@ -605,6 +607,8 @@ def execution(lims = None, description="", remote_working_directory=None):
         finally:
             os.chdir("..")
             shutil.rmtree(ex.working_directory, ignore_errors=True)
+            cleaned_up = True
+        assert(cleaned_up)
 
 
 class MiniLIMS(object):
