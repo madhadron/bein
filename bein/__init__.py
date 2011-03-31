@@ -63,6 +63,7 @@ import time
 import shutil
 import threading
 import traceback
+import re
 from contextlib import contextmanager
 
 
@@ -382,28 +383,26 @@ class program(object):
         """Method called by ``nonblocking`` to run via LSF."""
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
-        d = self.gen_args(*args, **kwargs)
 
-
+        stdout1 = ''
+        stderr1 = ''
+        stdout = unique_filename_in(ex.working_directory)
+        stderr = unique_filename_in(ex.working_directory)
         if kwargs.has_key('stdout'):
-            stdout = kwargs['stdout']
+            stdout1 = kwargs['stdout']
             kwargs.pop('stdout')
-            load_stdout = False
-        else:
-            stdout = unique_filename_in(ex.working_directory)
-            load_stdout = True
-
-
         if kwargs.has_key('stderr'):
-            stderr = kwargs['stderr']
+            stderr1 = kwargs['stderr']
             kwargs.pop('stderr')
-            load_stderr = False
-        else:
-            stderr = unique_filename_in(ex.working_directory)
-            load_stderr = True
 
+        d = self.gen_args(*args, **kwargs)
+        remote_cmd = " ".join(d["arguments"])
+        if stdout1:
+            remote_cmd += ">"+stdout1
+        if stderr1:
+            remote_cmd = "("+remote_cmd+")>&"+stderr1
         cmds = ["bsub","-cwd",ex.remote_working_directory,"-o",stdout,"-e",stderr,
-                "-K","-r"] + d["arguments"]
+                "-K","-r",remote_cmd]
         class Future(object):
             def __init__(self):
                 self.program_output = None
@@ -419,22 +418,14 @@ class program(object):
                 nullout = open(os.path.devnull, 'w')
                 sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
                 return_code = sp.wait()
-                while not((load_stdout or os.path.exists(os.path.join(ex.working_directory,
-                                                                      stdout))) and
-                          (load_stderr or os.path.exists(os.path.join(ex.working_directory,
-                                                                      stderr)))):
+                while not(os.path.exists(os.path.join(ex.working_directory,stdout))):
                     pass # We need to wait until the files actually show up
-                if load_stdout:
-                    with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
-                        stdout_value = fo.readlines()
-                else:
-                    stdout_value = None
-
-                if load_stderr:
-                    with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
-                        stderr_value = fe.readlines()
-                else:
-                    stderr_value = None
+                with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
+                    stdout_value = fo.readlines()
+                while not(os.path.exists(os.path.join(ex.working_directory,stderr))):
+                    pass # We need to wait until the files actually show up
+                with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
+                    stderr_value = fe.readlines()
 
                 f.program_output = ProgramOutput(return_code, sp.pid,
                                                  cmds, stdout_value, stderr_value)
