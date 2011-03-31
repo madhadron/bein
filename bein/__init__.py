@@ -384,25 +384,31 @@ class program(object):
         if not(isinstance(ex,Execution)):
             raise ValueError("First argument to a program must be an Execution.")
 
-        stdout1 = ''
-        stderr1 = ''
-        stdout = unique_filename_in(ex.working_directory)
-        stderr = unique_filename_in(ex.working_directory)
         if kwargs.has_key('stdout'):
-            stdout1 = kwargs['stdout']
+            stdout = kwargs['stdout']
             kwargs.pop('stdout')
+            load_stdout = False
+        else:
+            stdout = unique_filename_in(ex.working_directory)
+            load_stdout = True
+
         if kwargs.has_key('stderr'):
-            stderr1 = kwargs['stderr']
+            stderr = kwargs['stderr']
             kwargs.pop('stderr')
+            load_stderr = False
+        else:
+            stderr = unique_filename_in(ex.working_directory)
+            load_stderr = True
 
         d = self.gen_args(*args, **kwargs)
+
+        # Jacques Rougemont figured out the following syntax that works in
+        # both bash and tcsh.
         remote_cmd = " ".join(d["arguments"])
-        if stdout1:
-            remote_cmd += ">"+stdout1
-        if stderr1:
-            remote_cmd = "("+remote_cmd+")>&"+stderr1
-        cmds = ["bsub","-cwd",ex.remote_working_directory,"-o",stdout,"-e",stderr,
-                "-K","-r",remote_cmd]
+        remote_cmd += ">"+stdout
+        remote_cmd = "("+remote_cmd+")>&"+stderr
+        cmds = ["bsub","-cwd",ex.remote_working_directory,"-o","/dev/null",
+                "-e","/dev/null","-K","-r",remote_cmd]
         class Future(object):
             def __init__(self):
                 self.program_output = None
@@ -416,16 +422,25 @@ class program(object):
         def g():
             try:
                 nullout = open(os.path.devnull, 'w')
-                sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, stderr=nullout)
+                sp = subprocess.Popen(cmds, bufsize=-1, stdout=nullout, 
+                                      stderr=nullout)
                 return_code = sp.wait()
-                while not(os.path.exists(os.path.join(ex.working_directory,stdout))):
+                while not(os.path.exists(os.path.join(ex.working_directory,
+                                                      stdout))):
                     pass # We need to wait until the files actually show up
-                with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
-                    stdout_value = fo.readlines()
+                if load_stdout:
+                    with open(os.path.join(ex.working_directory,stdout), 'r') as fo:
+                        stdout_value = fo.readlines()
+                else:
+                    stdout_value = None
+
                 while not(os.path.exists(os.path.join(ex.working_directory,stderr))):
                     pass # We need to wait until the files actually show up
-                with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
-                    stderr_value = fe.readlines()
+                if load_stderr:
+                    with open(os.path.join(ex.working_directory,stderr), 'r') as fe:
+                        stderr_value = fe.readlines()
+                else:
+                    stderr_value = None
 
                 f.program_output = ProgramOutput(return_code, sp.pid,
                                                  cmds, stdout_value, stderr_value)
