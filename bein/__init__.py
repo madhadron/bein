@@ -56,11 +56,13 @@ import subprocess
 import random
 import traceback
 import string
+import sys
 import os
 import sqlite3
 import time
 import shutil
 import threading
+import traceback
 from contextlib import contextmanager
 
 
@@ -596,9 +598,11 @@ def execution(lims = None, description="", remote_working_directory=None):
     exception_string = None
     try:
         yield ex
-#    except Exception, e:
-#        exception_string = ''.join(traceback.format_exception_only(e.__class__, str(e)))
-#        raise e
+    except:
+        (exc_type, exc_value, exc_traceback) = sys.exc_info()
+        exception_string = ''.join(traceback.format_exception(exc_type, exc_value,
+                                                            exc_traceback))
+        raise
     finally:
         ex.finish()
         try:
