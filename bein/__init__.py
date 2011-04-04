@@ -405,8 +405,8 @@ class program(object):
         # Jacques Rougemont figured out the following syntax that works in
         # both bash and tcsh.
         remote_cmd = " ".join(d["arguments"])
-        remote_cmd += ">"+stdout
-        remote_cmd = "("+remote_cmd+")>&"+stderr
+        remote_cmd += " > "+stdout
+        remote_cmd = " ( "+remote_cmd+" ) >& "+stderr
         cmds = ["bsub","-cwd",ex.remote_working_directory,"-o","/dev/null",
                 "-e","/dev/null","-K","-r",remote_cmd]
         class Future(object):
