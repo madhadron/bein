@@ -1,5 +1,5 @@
-bein 0.95 
-Copyright 2010 Frederick Ross <madhadron at gmail dot com>
+bein 1.06
+Copyright 2011 Frederick Ross <madhadron at gmail dot com>
 
 Bein is a workflow manager and miniature LIMS system built in the
 Bionformatics and Biostatistics Core Facility of the EPFL.  It fills
@@ -13,9 +13,7 @@ this license is in the LICENSE file.
 Installation
 ------------
 
-You will need to have Python >= 2.5 installed on your system.  The
-webclient also requires CherryPy >= 3.1, and some of the functions in
-bein.utils require numpy, matplotlib, and pysam.
+You will need to have Python >= 2.5 installed on your system.  Some of the functions in bein.utils require numpy, matplotlib, pytables, and pysam, but will simply be unavailable if those libraries are not installed.
 
 To install bein, in the bein directory, run
 
@@ -26,8 +24,7 @@ $ sudo python setup.py install
 Known issues
 ------------
 
-* Bein has no unit tests.
-
+None
 
 Acknowledgements
 ----------------
@@ -35,13 +32,6 @@ Acknowledgements
 The development of bein was supported by The Bioinformatics and
 Biostatistics Core Facility of the EPFL (http://bbcf.epfl.ch/) and
 SyBit (http://www.systemsx.ch/projects/systemsxch-projects/sybit/).
-
-
-Changelog
----------
-
-0.95:
-    * First stable release of bein, with a manual.
 
 
 Features to add someday
