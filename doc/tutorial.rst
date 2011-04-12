@@ -4,47 +4,55 @@ Tutorial
 What is bein?
 -------------
 
-Bein is a small Python library.  It addresses two distinct problems: repeating and organizing sequences of operations on data, and keeping track of the resulting files.  Of course, bein is not the first system to do this.  These two threads have run through all of computing history, and all of human organization before that.  But the "right" way of solving each of them depends on the number and kind of the operations, and on what needs to be tracked in the files.
+Bein is a Python library.  Beyond that we have had trouble explaining Bein in a few words.  The best way to understand it is to work through a nontrivial example, as this tutorial does.
 
-The venerable Unix shell represents one solution.  It has persisted for forty years because it is probably the fastest way to link together a few programs to operate on a single piece of data.  However, complicated sequences quickly become unwieldy.  Worse, parallel data sets quickly become snarled messes, as programmers realized immediately after the shell's introduction.  They were dealing with multiple versions of source code and running complicated commands to compile that code.  Resolving these problems has driven the last forty years of development of version control systems and build systems.
+As a rough overview, Bein can help you if you
 
-A similar problem afflicts scientists and engineers, who often have several sets of data from related experiments, and suffer the same problems as programmers with multiple versions of source code.  The right tool for the task depends strongly on how many such data sets there are and how complicated the analysis they have to run on it is.  We can take these two aspects as the coordinates of different systems to solve the problem.
+* analyze lots of data, and the analyses share many common elements, but the analyses are sufficiently different that small tweaks and if statements in a single script will not suffice.
+* have from two to a hundred files that must analyzed in the same way, and you need to keep track of which results came from which file.
+* need to interleave computations with calls to external programs in your analyses.
 
-.. image:: plot.png
-
-Most solutions have focused on long workflows with huge numbers of parallel data sets, starting with `Discovery Net <http://en.wikipedia.org/wiki/Discovery_Net>`_ from Imperial College London and continuing through modern systems like `Galaxy <http://galaxy.psu.edu/>`_.  These systems are ideal a mass spectrometry or sequencing center which needs to process and track all the data it produces before turning it over to its customers.
-
-On a somewhat smaller scale, another Python based system called `Ruffus <http://www.ruffus.org.uk/>`_ does a great deal of detailed handling of workflows, parallelizing jobs, and restarting workflows that failed.  It assumes some kind of external system to handle the files it produces.  For a well established pipeline, this is again marvelous.
-
-Much of a scientist's day to day work, however, involves fairly simple workflows of no more than ten or twenty steps, and five or six parallel data sets.  In this case all these systems are overkill, and their sophistication becomes a millstone around the practitioner's neck.  This is the niche that bein fills.
-
-Bein is tiny.  It's under 1000 lines of code, and the core logic is under 500.  It is the result of a year of writing, testing, and rewriting to make a tool for the day to day work in the Bioinformatics and Biostatistics Core Facility of the Ecole Polytechnique Federale de Lausanne.
-
+If you have thousands of files to be analyzed in the same way, you would be better served by systems like Galaxy and OpenBIS.  For running a couple, quick commands on a single file, the Unix shell remains the best tool.  If you are running simulations, and are therefore not concerned with external programs or tracking lots of files, we recommend you look at Sumatra; but for many people, including most bioinformaticists, Bein hits a sweet spot.
 
 Installation
 ------------
 
-Bein's core logic depends only on the default Python distribution (version >=2.5) and SQLite.  The included library of utilities also depends on matplotlib, numpy, and scipy, all of which you should install if you are contemplating any scientific computing in Python.
+Bein is distributed as two packages: ``bein`` and ``bein_htminilims``.  The package ``bein`` contains the core logic and a library of utilities.  It depends on Python >= 2.5 and SQLite3.  Some of the utilities depend on numpy, scipy, matplotlib, and pytables, but if you do not have these installed, those utilities will simply be unavailable.
 
-There are three ways to install bein:
+The package ``bein_htminilims`` contains a small web frontend for Bein's data repositories.  It is self contained, and depends on cherrypy and Mako.
 
-#. The simplest way is to fetch and install bein automatically from the Python Package Index.  Just run::
+Stable releases of both packages are available from the Python package index.  You can install them with::
 
     sudo pip install bein
+    sudo pip install bein_htminilims
 
-#. Download a compressed archive of the source code, and install it by hand.  In the directory you downloaded ``bein-X.tar.gz``, run the commands::
-
-    tar -xvzf bein-X.tar.gz
-    cd bein
-    python setup.py build
-    sudo python setup.py install
-
-#. Fetch the latest version from GitHub, then compile it by hand::
+The latest development code, is available on GitHub.  To install the development version, run::
 
     git clone https://github.com/madhadron/bein.git
     cd bein
     python setup.py build
     sudo python setup.py install
+    git clone https://github.com/madhadron/bein-htminilims.git
+    cd bein-htminilims
+    python setup.py build
+    sudo python setup.py install
+
+An overview of using Bein
+-------------------------
+
+Bein is built on three components.
+
+1. **MiniLIMS repositories**  track the origin of files and all programs run in the course of an analysis.  They consist of an SQLite database and a folder containing all files tracked in the database.
+
+2. **Execution blocks** isolate and log a piece of code.  All work done in an execution block takes place in a uniquely named subdirectory of the current working directory which is deleted at the end of the block.  External programs run during the block and files added to a MiniLIMS in the block are automatically logged.
+
+3. **External program bindings** reduce calling external programs and scripts in analysis code to giving the exact command to be run and a function to parse its output into a return value.
+
+With these pieces, a typical analysis in Bein goes like this: you begin with a directory containing the data files to analyze.  In that directory you create a MiniLIMS repository and add the data file to it.
+
+Then you write a Python script containing bindings to all the external programs you need, and an execution block which fetches the data to analyze from the MiniLIMS, does whatever analysis needs to be done, and writes its results back to the MiniLIMS.
+
+When you run the script, the excution block creates a uniquely named subdirectory, such as ``CK7JTCFUljjgMLlyEag6``.  All work is done in that subdirectory --- any files used copied from the MiniLIMS, all temporary files written there, files written back to the MiniLIMS containing the results --- then the subdiretory is deleted, leaving the original project directory unchanged except for file and logs added to the MiniLIMS.
 
 Your first workflow
 -------------------
@@ -109,15 +117,15 @@ Executions create randomly named working directories, do everything therein, the
 
 Bein provides a simple webclient to browse MiniLIMS repositories.  Run the command::
 
-    beinclient data
+    htminilims data
 
-and point your browsier to ``http://localhost:8080``.  
+and point your browser to ``http://localhost:8080``.  
 
 .. image:: beinclient1.png
 
-We have two tabs at the top of the page, one for executions, one for files in the repository.  Each execution is assigned a unique numeric ID.  Every external program run by an execution is recorded.  If it produced output on ``stdout`` or ``stderr`` that is recorded as well (though ``touch`` does not, so it is absent here).  Finally, if an execution had failed, the Python exception from that failure is recorded and displayed.
+We have two tabs at the top of the page, one for executions, one for files in the repository.  Each execution is assigned a unique numeric ID.  Clicking on the 'details' link shows additional information on the execution, such as when and where it ran.  Every external program run by an execution is recorded.  If it produced output on ``stdout`` or ``stderr`` that is recorded  (though ``touch`` does not, so it is absent here).  Clicking the 'programs' link in an execution drops down a box showing this information.  Finally, if an execution had failed, the Python exception from that failure is recorded and can be displayed with the 'traceback' link.
 
-If we click on the "Files" tab in ``beinclient``, it is empty. Filling this tab is the topic of our next two sections.
+If we click on the "Files" tab in ``htminilims``, it is empty. Filling this tab is the topic of our next two sections.
 
 
 Using the MiniLIMS from executions
@@ -134,15 +142,19 @@ Let's modify the workflow in ``test.py`` to add the file ``boris`` that we creat
        print ex.working_directory
        ex.add("boris")
 
-We run the script, and look in ``beinclient``.  The execution has a new field, "Added files."
+We run the script, and look in ``htminilims``.  The new execution has an additional line.  Each file we add shows up as as one line in the execution.
 
 .. image:: beinclient2.png
 
-If we click on the the files "1", we are taken to the "Files" tab, which is no longer empty.
+If we click on the the file "1", we are taken to the "Files" tab, which is no longer empty.
 
 .. image:: beinclient3.png
 
-Don't worry about most of the fields for now.  Note that files, like executions, are assigned numeric IDs.  The "External name" is the name of the file when it was added to the repository.  Internally, bein assigns it a unique, random name, which is the "Repository name."  The file is stored under this name in the ``data.files`` directory of our MiniLIMS.
+Note that files, like executions, are assigned numeric IDs.  Clicking on "details" shows additional information.
+
+.. image:: beinclient3a.png
+
+Don't worry about most of the fields for now.    The "External name" is the name of the file when it was added to the repository.  Internally, bein assigns it a unique, random name, which is the "Repository name."  The file is stored under this name in the ``data.files`` directory of our MiniLIMS.
 
 In the file's header it says "*(no description)*".  Our executions say this as well.  When adding a file to the repository, you can give it a description by setting the ``description`` keyword argument to ``add``.  For instance, we might have written::
 
@@ -153,9 +165,11 @@ in our script.  Adding descriptions to executions is almost the same.  Add the `
     with execution(M, description="Touch the file boris...") as ex:
         ...
 
-If we make these changes to ``test.py`` and run it again, the execution and file that result appear in ``beinclient`` as
+If we make these changes to ``test.py`` and run it again, the execution and file that result appear in ``htminilims`` as
 
 .. image:: beinclient-execution-description.png
+
+and
 
 .. image:: beinclient-file-description.png
 
@@ -172,7 +186,7 @@ When we run this, it prints ``Used file has name 0ktonMhlO3BCl8kH9WqP in working
 
 What happened to ``boris``?  We could add many files named ``boris`` to the repository, and use them all in the same execution.  To prevent name collisions, ``use`` gives the file a random name in the working directory, and returns that name.
 
-If we run this and look at the execution in ``beinclient``, we find a new field
+If we run this and look at the execution in ``htminilims``, we find a new field
 
 .. image:: beinclient-used-files.png
 
@@ -203,7 +217,7 @@ If ``/path/to/export/to`` points to a directory, the file is copied there with i
     M = MiniLIMS("data")
     fileid = M.import_file("/path/to/file")
 
-If we import ``test.py`` this way, and look at it in ``beinclient``, we see that bein also tracks whether a file was imported or not.
+If we import ``test.py`` this way, and look at it in ``htminilims``, we see that bein also tracks whether a file was imported or not.
 
 .. image:: imported_file.png
 
@@ -360,11 +374,17 @@ When we run it, we get the error::
     bein.ProgramFailed: Running 'wc -l borsi' failed with stderr:
         wc: borsi: open: No such file or directory
 
-Of course, we misspelled ``boris``.  No harm done.  Fix it and run it again.  If we lose the error before we fix it, there's no problem.  It's displayed in ``beinclient`` as well.
+Of course, we misspelled ``boris``.  No harm done.  Fix it and run it again.  If we lose the error before we fix it, there's no problem.  It's displayed in ``htminilims`` as well.
 
 .. image:: failed_execution.png
 
-Do something with the touched boris file, but misspell it.  Show error message, show that it's all properly recorded in bein and cleaned up.  Don't be afraid of failure.
+The program that failed is shown in red when you click on the "programs" link
+
+.. image:: failed_execution-programs.png
+
+and the full traceback shows us the error as well
+
+.. image:: failed_execution-traceback.png
 
 Certain errors show up all the time.  Check for them first:
 
