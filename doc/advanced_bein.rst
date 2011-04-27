@@ -202,6 +202,50 @@ Unfortunately, you have to add your own ``nonblocking`` binding by hand, as in::
 
 You may also want to use these keyword arguments if you expect enormous amounts of data on ``stdout`` or ``stderr``, more than can be reasonably bassed back in a ``ProgramOutput`` object.
 
+The ``@task`` decorator
+***********************
+
+If there is an error in in the middle of an execution that takes many hours to run, you lose all the work up to that point.  It is better to break such long workflows into several pieces.  Doing this with the techniques described so far is a nuisance, since you have to manually find the files one execution added to the MiniLIMS and feed them into the next.
+
+Bein provides a decorator called ``@task`` to simplify such segmented workflows.  Instead of writing a single execution, you write a series of functions, each representing a stage of the workflow, and annotate each of them with ``@task``.  The decorator wraps the function so that when you call it, it is automatically wrapped in an execution and returns a dictionary giving the return value of the function, all files added to the MiniLIMS by the function, and the execution ID under which the function ran.
+
+For example, say we have an execution which takes a long time to run::
+
+    with execution(M) as ex:
+        # First logical stage of the execution
+	...
+
+	# Second logical stage of the execution
+	...
+
+We divide it into two functions, ``first_part`` and ``second_part``::
+
+    @task
+    def first_part(ex, ...)
+        # First logical stage of the execution
+        ...
+	return ...
+
+    @task
+    def second_part(ex, ...)
+        ex.use(...) # Use any results from first_part that we need
+	# Second logical stage of the execution
+	...
+
+Then we would call them in sequence::
+
+    M = MiniLIMS(...)
+    a = first_part(M, ...)
+    b = second_part(M, ...)
+
+Note that we wrote ``ex`` for execution when defining the tasks, but we pass a MiniLIMS when we call them.  This is a change made by the ``@task`` decorator.  The return value of ``first_part`` is not just the value returned by the function.  Instead, it is a dictionary containing ``first_part``'s return value, a dictionary of all the files added by ``first_part``, and the execution ID under which it ran.  If ``first_part`` return a value 12, added two files which were given the IDs and descriptions of 3 and "Boris" and 6 and "Hilda", respectively, and ran as execution 36, then ``a`` would have the value::
+
+    {'value': 12,
+     'files': {"Boris": 3, "Hilda": 6},
+     'execution': 36}
+
+You would pass any necessary pieces of this to ``second_part``.  Now when you run the whole sequence, each stage is run as a logical unit.  You can restart from a later point if something fails.
+
 Writing robust program bindings
 *******************************
 
