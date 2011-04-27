@@ -1380,3 +1380,76 @@ class MiniLIMS(object):
         dst = self.resolve_alias(associated_to)
         self.db.execute("""delete from file_association where fileid=? and associated_to=?""", (src,dst))
         self.db.commit()
+
+
+def task(f):
+    """Wrap the function *f* in an execution.
+
+    The @task decorator wraps a function in an execution and handles
+    producing a sensible return value.  The function must expect its
+    first argument to be an execution.  The function produced by @task
+    instead expects a MiniLIMS (or ``None``) in its place.
+    You can also pass a ``description`` keyword argument, which will
+    be used to set the description of the execution.  For example,::
+
+        @task
+        def f(ex, filename):
+            touch(ex, filename)
+            ex.add(filename, "New file")
+            return {'created': filename}
+
+    will be wrapped into a function that is called as::
+
+        f(M, "boris", description="An execution")
+
+    where ``M`` is a MiniLIMS.  It could also be called with ``None``
+    in place of ``M``::
+
+        f(None, "boris")
+
+    which is the same as creation an execution without attaching it to
+    a MiniLIMS.  In this case it will fail, since ``f`` tries to add a
+    file to the MiniLIMS.
+
+    The return value is a dictionary with three keys:
+    
+        * ``value`` is the value returned by the function which @task
+          wrapped.
+
+        * ``files`` is a dictionary of all files the execution added
+          to the MiniLIMS, with their descriptions as keys and their
+          IDs in the MiniLIMS as values.
+
+        * ``execution`` is the execution ID.
+
+    In the call to ``f`` above, the return value would be (with some
+    other value for ``'execution'`` in practice)::
+
+        {'value': {'created': 'boris'},
+         'files': {'New file': 'boris'},
+         'execution': 33}
+    """
+    def wrapper(lims, *args, **kwargs):
+        # If there is a description given, pull it out to use for the
+        # execution.
+        try:
+            description = kwargs.pop('description')
+        except KeyError, k:
+            description = ""
+
+        # Wrap the function to run in an execution.
+        with execution(lims, description=description) as ex:
+            v = f(ex, *args, **kwargs)
+
+        # Pull together the return value.
+        ex_id = ex.id
+        if isinstance(lims, MiniLIMS):
+            file_ids = lims.search_files(source=('execution', ex_id))
+            files = dict([(lims.fetch_file(i)['description'],i) for i in file_ids])
+        else:
+            files = {}
+        return {'value': v, 'files': files, 'execution': ex_id}
+
+    wrapper.__doc__ = f.__doc__
+    wrapper.__name__ = f.__name__
+    return wrapper

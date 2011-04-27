@@ -90,3 +90,5 @@
 
 
   .. autoexception:: ProgramFailed
+
+  .. autofunction:: task
