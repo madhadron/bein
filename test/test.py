@@ -146,6 +146,15 @@ class TestMiniLIMS(TestCase):
             with execution(M) as ex:
                 fpath = ex.path_to_file(fid)
         self.assertEqual(mpath, fpath)
+
+    def test_search_files(self):
+        f_desc = unique_filename_in()
+        t1 = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        f_id = M.import_file("../LICENSE", description=f_desc)
+        t2 = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        f_found = M.search_files(with_text="LICENSE", with_description=f_desc, older_than=t2, source="import", newer_than=t1)
+        M.delete_file(f_id)
+        self.assertIn(f_id, f_found)
             
 
 @program
@@ -273,6 +282,7 @@ class TestAssociatePreservesFilenames(TestCase):
                 M.delete_execution(ex.id)
             except:
                 pass
+
 
 def test_given(tests):
     module = sys.modules[__name__]

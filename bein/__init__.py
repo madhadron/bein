@@ -1008,7 +1008,7 @@ class MiniLIMS(object):
         self._rename_in_repository(thisid, new_target_name)
         self.associate_file(thisid, targetid, template)
 
-    def search_files(self, with_text=None, older_than=None, newer_than=None, source=None):
+    def search_files(self, with_text=None, with_description=None, older_than=None, newer_than=None, source=None):
         """Find files matching given criteria in the LIMS.
 
         Finds files which satisfy all the criteria which are not None.
@@ -1018,9 +1018,9 @@ class MiniLIMS(object):
              contains *with_text*
 
            * *older_than*: The file's created time is earlier than
-             *older_than*.  This should be of the form "YYYY:MM:DD
+             *older_than*.  This should be of the form "YYYY-MM-DD
              HH:MM:SS".  Final fields can be omitted, so "YYYY" and
-             "YYYY:MM:DD HH:MM" are also valid date formats.
+             "YYYY-MM-DD HH:MM" are also valid date formats.
 
            * *newer_than*: The file's created time is later than
              *newer_then*, using the same format as *older_than*.
@@ -1032,20 +1032,23 @@ class MiniLIMS(object):
              this file, and ``srcid`` is the file ID of the file which
              was copied to create this one.
         """
-        if not(isinstance(source, tuple)):
-            source = (source,None)
+        if not(isinstance(source, tuple)):  # If source is not a tuple,
+            source = (source,None)          # make it be a tuple.
         source = source != None and source or (None,None)
         with_text = with_text != None and '%' + with_text + '%' or None
-        sql = """select id from file where ((external_name like ? or ? is null)
-                                            or (description like ? or ? is null))
+        sql = """select id from file where ((external_name like ? or ? is null) or (description like ? or ? is null))
+                                          and (description like ? or ? is null)
                                           and (created >= ? or ? is null)
                                           and (created <= ? or ? is null)
                                           and (origin = ? or ? is null)
                                           and (origin_value = ? or ? is null)"""
         matching_files = self.db.execute(sql, (with_text, with_text,
                                                with_text, with_text,
-                                               newer_than, newer_than, older_than, older_than,
-                                               source[0], source[0], source[1], source[1]))
+                                               with_description, with_description,
+                                               newer_than, newer_than,
+                                               older_than, older_than,
+                                               source[0], source[0],
+                                               source[1], source[1]))
         return [x for (x,) in matching_files]
 
     def search_executions(self, with_text=None, started_before=None,
