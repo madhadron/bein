@@ -171,6 +171,7 @@ class program(object):
             b.wait()
 
     By default, ``nonblocking`` runs local processes, but you can
+
     control how it runs its processes with the ``via`` keyword
     argument.  For example, on systems using the LSF batch submission
     system,s you can run commands via batch submission by passing the
@@ -1284,15 +1285,26 @@ class MiniLIMS(object):
         return [x for (x,) in 
                 self.db.execute("""select last_insert_rowid()""")][0]
         
-    def export_file(self, file_or_alias, dst):
+    def export_file(self, file_or_alias, dst, with_associated=False):
         """Write *file_or_alias* from the MiniLIMS repository to *dst*.
 
         *dst* can be either a directory, in which case the file will
         have its repository name in the new directory, or can specify
         a filename, in which case the file will be copied to that
         filename.
+        Associated files will also be copied if *with_associated=True*.
         """
-        shutil.copy(self.path_to_file(file_or_alias), dst)
+        src = self.path_to_file(file_or_alias) #src = /Users/delafont/bein/test/testing_lims.files/ERgkmXbYF3jwvHDQpf8J
+        shutil.copy(src, dst)                  #dst = testing.files/exportedfile
+        print self.fetch_file(file_or_alias)
+        if with_associated:
+            if os.path.isdir(dst):         #if dst is a directory
+                dst = os.path.join(dst, self.fetch_file(file_or_alias)['repository_name'])
+            for association in self.fetch_file(file_or_alias)['associations']:  #association = (id,template)
+                fileid = association[0]
+                template = association[1][2:] #removes %s
+                dst = dst + template
+                shutil.copy(src,dst)
 
     def path_to_file(self, file_or_alias):
         """Return the full path to a file in the repository.

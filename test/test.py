@@ -155,7 +155,29 @@ class TestMiniLIMS(TestCase):
         f_found = M.search_files(with_text="LICENSE", with_description=f_desc, older_than=t2, source="import", newer_than=t1)
         M.delete_file(f_id)
         self.assertIn(f_id, f_found)
-            
+
+class TestExportFile(TestCase):
+    def test_export_file(self):
+        filea = M.import_file("../LICENSE")  #file ID
+        fileb = M.import_file("../doc/bein.rst")
+        testdir = "testing.files"
+        if not os.path.isdir(testdir):
+            os.mkdir(testdir)
+        M.associate_file(fileb,filea,template="%s.linked")
+        
+        M.export_file(filea, dst=os.path.join(testdir,"exportedfile"), with_associated=True) #test with file name given
+        self.assertTrue(os.path.isfile(os.path.join(testdir,"exportedfile"+".linked")))
+        
+        os.remove(os.path.join(testdir,"exportedfile"))
+        os.remove(os.path.join(testdir,"exportedfile"+".linked"))
+        
+        M.export_file(filea, dst=testdir, with_associated=True) #test with directory given
+        filename = M.fetch_file(filea)['repository_name']
+        self.assertTrue(os.path.isfile(os.path.join(testdir, filename +".linked")))
+        
+        os.remove(os.path.join(testdir, filename))
+        os.remove(os.path.join(testdir, filename +".linked"))
+
 
 @program
 def echo(s):
