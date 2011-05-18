@@ -1294,11 +1294,11 @@ class MiniLIMS(object):
         filename.
         Associated files will also be copied if *with_associated=True*.
         """
-        src = self.path_to_file(file_or_alias) #src = /Users/delafont/bein/test/testing_lims.files/ERgkmXbYF3jwvHDQpf8J
-        shutil.copy(src, dst)                  #dst = testing.files/exportedfile
+        src = self.path_to_file(file_or_alias)
+        shutil.copy(src, dst) 
         print self.fetch_file(file_or_alias)
         if with_associated:
-            if os.path.isdir(dst):         #if dst is a directory
+            if os.path.isdir(dst):
                 dst = os.path.join(dst, self.fetch_file(file_or_alias)['repository_name'])
             for association in self.fetch_file(file_or_alias)['associations']:  #association = (id,template)
                 fileid = association[0]
