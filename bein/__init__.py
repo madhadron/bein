@@ -171,6 +171,7 @@ class program(object):
             b.wait()
 
     By default, ``nonblocking`` runs local processes, but you can
+
     control how it runs its processes with the ``via`` keyword
     argument.  For example, on systems using the LSF batch submission
     system,s you can run commands via batch submission by passing the
@@ -1008,7 +1009,7 @@ class MiniLIMS(object):
         self._rename_in_repository(thisid, new_target_name)
         self.associate_file(thisid, targetid, template)
 
-    def search_files(self, with_text=None, older_than=None, newer_than=None, source=None):
+    def search_files(self, with_text=None, with_description=None, older_than=None, newer_than=None, source=None):
         """Find files matching given criteria in the LIMS.
 
         Finds files which satisfy all the criteria which are not None.
@@ -1018,9 +1019,9 @@ class MiniLIMS(object):
              contains *with_text*
 
            * *older_than*: The file's created time is earlier than
-             *older_than*.  This should be of the form "YYYY:MM:DD
+             *older_than*.  This should be of the form "YYYY-MM-DD
              HH:MM:SS".  Final fields can be omitted, so "YYYY" and
-             "YYYY:MM:DD HH:MM" are also valid date formats.
+             "YYYY-MM-DD HH:MM" are also valid date formats.
 
            * *newer_than*: The file's created time is later than
              *newer_then*, using the same format as *older_than*.
@@ -1032,20 +1033,23 @@ class MiniLIMS(object):
              this file, and ``srcid`` is the file ID of the file which
              was copied to create this one.
         """
-        if not(isinstance(source, tuple)):
-            source = (source,None)
+        if not(isinstance(source, tuple)):  # If source is not a tuple,
+            source = (source,None)          # make it be a tuple.
         source = source != None and source or (None,None)
         with_text = with_text != None and '%' + with_text + '%' or None
-        sql = """select id from file where ((external_name like ? or ? is null)
-                                            or (description like ? or ? is null))
+        sql = """select id from file where ((external_name like ? or ? is null) or (description like ? or ? is null))
+                                          and (description like ? or ? is null)
                                           and (created >= ? or ? is null)
                                           and (created <= ? or ? is null)
                                           and (origin = ? or ? is null)
                                           and (origin_value = ? or ? is null)"""
         matching_files = self.db.execute(sql, (with_text, with_text,
                                                with_text, with_text,
-                                               newer_than, newer_than, older_than, older_than,
-                                               source[0], source[0], source[1], source[1]))
+                                               with_description, with_description,
+                                               newer_than, newer_than,
+                                               older_than, older_than,
+                                               source[0], source[0],
+                                               source[1], source[1]))
         return [x for (x,) in matching_files]
 
     def search_executions(self, with_text=None, started_before=None,
@@ -1281,15 +1285,26 @@ class MiniLIMS(object):
         return [x for (x,) in 
                 self.db.execute("""select last_insert_rowid()""")][0]
         
-    def export_file(self, file_or_alias, dst):
+    def export_file(self, file_or_alias, dst, with_associated=False):
         """Write *file_or_alias* from the MiniLIMS repository to *dst*.
 
         *dst* can be either a directory, in which case the file will
         have its repository name in the new directory, or can specify
         a filename, in which case the file will be copied to that
         filename.
+        Associated files will also be copied if *with_associated=True*.
         """
-        shutil.copy(self.path_to_file(file_or_alias), dst)
+        src = self.path_to_file(file_or_alias)
+        shutil.copy(src, dst) 
+        print self.fetch_file(file_or_alias)
+        if with_associated:
+            if os.path.isdir(dst):
+                dst = os.path.join(dst, self.fetch_file(file_or_alias)['repository_name'])
+            for association in self.fetch_file(file_or_alias)['associations']:  #association = (id,template)
+                fileid = association[0]
+                template = association[1][2:] #removes %s
+                dst = dst + template
+                shutil.copy(src,dst)
 
     def path_to_file(self, file_or_alias):
         """Return the full path to a file in the repository.
