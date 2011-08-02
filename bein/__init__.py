@@ -468,7 +468,7 @@ class Execution(object):
     Execution, since it sets up the working directory properly.
 
     Executions are run against a particular MiniLIMS object where it
-    records all the information onf programs that were run during it,
+    records all the information on programs that were run during it,
     fetches files from it, and writes files back to it.
 
     The important methods for the user to know are ``add`` and ``use``.
@@ -664,11 +664,17 @@ class MiniLIMS(object):
       * :meth:`associated_files_of`
     """
     def __init__(self, path):
-        self.db = sqlite3.connect(path, check_same_thread=False)
-        self.file_path = os.path.abspath(path +".files")
-        if not(os.path.exists(self.file_path)):
+        self.path = os.path.abspath(path)
+        self.file_path = os.path.join(self.path, 'files')
+        self.memopad_path = os.path.join(self.path, 'memopad')
+        if not(os.path.exists(self.path)):
+            os.mkdir(self.path)
+            os.mkdir(os.path.join(self.path, 'files'))
+            os.mkdir(os.path.join(self.path, 'memopad'))
+            self.db = sqlite3.connect(os.path.join(self.path, 'metadata.db'))
             self.initialize_database(self.db)
-            os.mkdir(self.file_path)
+        else:
+            self.db = sqlite3.connect(os.path.join(self.path, 'metadata.db'))
         self.db.create_function("importfile",1,self._copy_file_to_repository)
         self.db.create_function("deletefile",1,self._delete_repository_file)
         self.db.create_function("exportfile",2,self._export_file_from_repository)
@@ -677,7 +683,7 @@ class MiniLIMS(object):
         """Sets up a new MiniLIMS database.
         """
         self.db.execute("""
-        CREATE TABLE execution ( 
+        CREATE TABLE if not exists execution ( 
              id integer primary key, 
              started_at integer not null, 
              finished_at integer default null,
@@ -686,7 +692,7 @@ class MiniLIMS(object):
              exception text default null
         )""")
         self.db.execute("""
-        CREATE TABLE program (
+        CREATE TABLE if not exists program (
                pos integer,
                execution integer references execution(id),
                pid integer not null,
@@ -697,7 +703,7 @@ class MiniLIMS(object):
                primary key (pos,execution)
         )""")
         self.db.execute("""
-        CREATE TABLE argument (
+        CREATE TABLE if not exists argument (
                pos integer,
                program integer references program(pos),
                execution integer references program(execution),
@@ -705,7 +711,7 @@ class MiniLIMS(object):
                primary key (pos,program,execution)
         )""")
         self.db.execute("""
-        CREATE TABLE file ( 
+        CREATE TABLE if not exists file ( 
                id integer primary key autoincrement, 
                external_name text, 
                repository_name text,
@@ -715,36 +721,36 @@ class MiniLIMS(object):
                origin_value integer default null
         )""")
         self.db.execute("""
-        CREATE TABLE execution_use (
+        CREATE TABLE if not exists execution_use (
                execution integer references execution(id),
                file integer references file(id)
         )""")
         self.db.execute("""
-        CREATE TABLE file_alias (
+        CREATE TABLE if not exists file_alias (
                alias text primary key,
                file integer references file(id)
         )""")
         self.db.execute("""
-        CREATE TABLE file_association (
+        CREATE TABLE if not exists file_association (
                id integer primary key,
                fileid integer references file(id) not null,
                associated_to integer references file(id) not null,
                template text not null
         )""")
         self.db.execute("""
-        CREATE TRIGGER prevent_repository_name_change BEFORE UPDATE ON file
+        CREATE TRIGGER if not exists prevent_repository_name_change BEFORE UPDATE ON file
         FOR EACH ROW WHEN (OLD.repository_name != NEW.repository_name) BEGIN
              SELECT RAISE(FAIL, 'Cannot change the repository name of a file.');
         END""")
         self.db.execute("""
-        CREATE VIEW file_direct_immutability AS 
+        CREATE VIEW if not exists file_direct_immutability AS 
         SELECT file.id as id, count(execution) > 0 as immutable 
         from file left join execution_use 
         on file.id = execution_use.file
         group by file.id
         """)
         self.db.execute("""
-        create view all_associations as
+        create view if not exists all_associations as
         select file.id as id, file_association.associated_to as target
         from file inner join file_association
         on file.id = file_association.fileid
@@ -754,28 +760,28 @@ class MiniLIMS(object):
         order by id asc
         """)
         self.db.execute("""
-        create view file_immutability as
+        create view if not exists file_immutability as
         select aa.id as id, max(fdi.immutable) as immutable
         from all_associations as aa left join file_direct_immutability as fdi
         on aa.target = fdi.id
         group by aa.id
         """)
         self.db.execute("""
-        CREATE VIEW execution_outputs AS
+        CREATE VIEW if not exists execution_outputs AS
         select execution.id as execution, file.id as file 
         from execution left join file 
         on execution.id = file.origin_value
         and file.origin='execution'
         """)
         self.db.execute("""
-        CREATE VIEW execution_immutability AS
+        CREATE VIEW if not exists execution_immutability AS
         SELECT eo.execution as id, ifnull(max(fi.immutable),0) as immutable from
         execution_outputs as eo left join file_immutability as fi
         on eo.file = fi.id
         group by id
         """)
         self.db.execute("""
-        CREATE TRIGGER prevent_file_delete BEFORE DELETE ON file 
+        CREATE TRIGGER if not exists prevent_file_delete BEFORE DELETE ON file 
         FOR EACH ROW WHEN 
             (SELECT immutable FROM file_immutability WHERE id = OLD.id) = 1
         BEGIN
@@ -783,7 +789,7 @@ class MiniLIMS(object):
         END
         """)
         self.db.execute("""
-        CREATE TRIGGER prevent_argument_delete BEFORE DELETE ON argument
+        CREATE TRIGGER if not exists prevent_argument_delete BEFORE DELETE ON argument
         FOR EACH ROW WHEN 
             (SELECT immutable FROM execution_immutability WHERE id = OLD.execution) = 1 
         BEGIN 
@@ -791,7 +797,7 @@ class MiniLIMS(object):
         END	   
         """)
         self.db.execute("""
-        CREATE TRIGGER prevent_argument_update BEFORE UPDATE ON argument
+        CREATE TRIGGER if not exists prevent_argument_update BEFORE UPDATE ON argument
         FOR EACH ROW WHEN
             (SELECT immutable FROM execution_immutability WHERE id = OLD.execution) = 1 
         BEGIN
@@ -799,7 +805,7 @@ class MiniLIMS(object):
         END
         """)
         self.db.execute("""
-        CREATE TRIGGER prevent_command_delete BEFORE DELETE ON program
+        CREATE TRIGGER if not exists prevent_command_delete BEFORE DELETE ON program
         FOR EACH ROW WHEN 
             (SELECT immutable FROM execution_immutability WHERE id = OLD.execution) = 1 
         BEGIN
@@ -807,7 +813,7 @@ class MiniLIMS(object):
         END
         """)
         self.db.execute("""
-        CREATE TRIGGER prevent_command_update BEFORE UPDATE ON program
+        CREATE TRIGGER if not exists prevent_command_update BEFORE UPDATE ON program
         FOR EACH ROW WHEN 
             (SELECT immutable FROM execution_immutability WHERE id = OLD.execution) = 1
         BEGIN
@@ -815,7 +821,7 @@ class MiniLIMS(object):
         END
         """)
         self.db.execute("""
-        CREATE TRIGGER prevent_execution_delete BEFORE DELETE ON execution 
+        CREATE TRIGGER if not exists prevent_execution_delete BEFORE DELETE ON execution 
         FOR EACH ROW WHEN
             (SELECT immutable FROM execution_immutability WHERE id = OLD.id) = 1
         BEGIN
@@ -823,7 +829,7 @@ class MiniLIMS(object):
         END
         """)
         self.db.execute("""
-        CREATE TRIGGER prevent_execution_update BEFORE UPDATE ON execution
+        CREATE TRIGGER if not exists prevent_execution_update BEFORE UPDATE ON execution
         FOR EACH ROW WHEN
             (SELECT immutable FROM execution_immutability WHERE id = OLD.id) = 1 AND 
             (OLD.id != NEW.id OR OLD.started_at != NEW.started_at OR OLD.finished_at != NEW.finished_at
@@ -833,7 +839,7 @@ class MiniLIMS(object):
         END
         """)
         self.db.execute("""
-        CREATE TRIGGER prevent_immutable_file_update BEFORE UPDATE on file 
+        CREATE TRIGGER if not exists prevent_immutable_file_update BEFORE UPDATE on file 
         FOR EACH ROW WHEN 
             (SELECT immutable FROM file_immutability WHERE id = old.id) = 1 AND 
             (OLD.id != NEW.id OR OLD.external_name != NEW.external_name OR 
@@ -844,6 +850,13 @@ class MiniLIMS(object):
             SELECT RAISE(FAIL, 'File is immutable; cannot update except description.'); 
         END
         """)
+        self.db.execute("""
+        CREATE TABLE if not exists memopad (
+            call_hash integer primary key,
+            filename text unique not null,
+            call text,
+            inserted timestamp default current_timestamp
+        )""")
         self.db.commit()
 
     def _copy_file_to_repository(self,src):
@@ -1296,7 +1309,6 @@ class MiniLIMS(object):
         """
         src = self.path_to_file(file_or_alias)
         shutil.copy(src, dst) 
-        print self.fetch_file(file_or_alias)
         if with_associated:
             if os.path.isdir(dst):
                 dst = os.path.join(dst, self.fetch_file(file_or_alias)['repository_name'])
@@ -1468,3 +1480,53 @@ def task(f):
     wrapper.__doc__ = f.__doc__
     wrapper.__name__ = f.__name__
     return wrapper
+
+
+class memoize(object):
+    """store objects have two methods: serialize and restore.  serialize takes an execution and a value, and returns a filename in the memopad directory; restore take an execution, and a filename in the memopad repository, and returns a restored value.  At the moment I see no need for the MiniLIMS in restore, but it keeps the symmetry and makes it easier to remember...and I'll probably think of a use for it at some point.
+
+    """
+    def __init__(self, return_store, *val_checks, **kwval_checks):
+        self.return_store = return_store
+        self.val_checks = val_checks
+        if 'rest' in kwval_checks:
+            self.rest_check = kwval_checks.pop('rest')
+        else:
+            self.rest_check = None
+        self.kwval_checks = kwval_checks
+
+    def __call__(self, f):
+        def wrapper(ex, *args, **kwargs):
+            f_hash = hash(f.__code__) # Hash the function's source code
+            # Hash fixed position arguments
+            fixed_arg_hashes = tuple([check(arg) for (arg, check) 
+                                      in zip(args, self.val_checks)])
+            # Hash remaining non-keyword arguments
+            if len(args) > len(self.val_checks):
+                rest_arg_hashes = tuple([self.rest_check(arg) 
+                                         for arg in args[len(self.val_checks)+1:]])
+            else:
+                rest_arg_hashes = None
+            # Hash keyword arguments
+            kw_arg_hashes = tuple([self.kwval_checks[k](v)
+                                   for k,v in kwargs.iteritems()])
+            # And combine everything into one big hash
+            call_hash = (f_hash, fixed_arg_hashes, 
+                         rest_arg_hashes, kw_arg_hashes).__hash__()
+
+            # Finally the actual memoization
+            v = ex.lims.db.execute("select filename from memopad where call_hash=?", (call_hash,)).fetchone()
+            if v == None: # not memoized, run the function and store the result
+                r = f(ex, *args)
+                filename = self.return_store.serialize(ex, r)
+                call_string = "%s(ex, %s)" % (f.__name__, (', '.join([repr(a) for a in args])) + \
+                                                  (', '.join(['%s=%s' % (k,repr(q)) 
+                                                              for k,q in kwargs.iteritems()])))
+                ex.lims.db.execute("""insert into memopad (call_hash, filename, call)
+                                      values (?, ?, ?)""", (call_hash, filename, call_string))
+                ex.lims.db.commit()
+                return r
+            else:
+                [filename] = v
+                return self.return_store.restore(ex, os.path.join(ex.lims.memopad_path, filename))
+        return wrapper
