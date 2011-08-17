@@ -486,12 +486,15 @@ class Execution(object):
         self.started_at = int(time.time())
         self.finished_at = None
         self.id = None
+
     def path_to_file(self, id_or_alias):
         """Fetch the path to *id_or_alias* in the attached LIMS."""
         if self.lims == None:
             raise ValueError("Cannot use path_to_file; no attached LIMS.")
         else:
-            return self.lims.path_to_file(id_or_alias)
+            fileid = self.lims.resolve_alias(id_or_alias)
+            self.used_files.append(fileid)
+            return self.lims.path_to_file(fileid)
 
     def report(self, program):
         """Add a ProgramOutput object to the execution.

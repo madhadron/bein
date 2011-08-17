@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import socket
 import re
 import sys
@@ -6,6 +8,8 @@ from unittest2 import TestCase, TestSuite, main, TestLoader, skipIf
 
 from bein import *
 from bein.util import touch
+
+sys.path.insert(1, '../')
 
 M = MiniLIMS("testing_lims")
 
@@ -145,7 +149,11 @@ class TestMiniLIMS(TestCase):
             mpath = M.path_to_file(fid)
             with execution(M) as ex:
                 fpath = ex.path_to_file(fid)
+            used_files = M.fetch_execution(ex.id)['used_files']
+        self.assertEqual(used_files, [fid])
         self.assertEqual(mpath, fpath)
+
+                         
 
     def test_search_files(self):
         f_desc = unique_filename_in()
